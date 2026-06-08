@@ -1,5 +1,5 @@
 frappe.listview_settings["Naprawa"] = {
-	add_fields: ["status", "priorytet"],
+	add_fields: ["status"],
 	get_indicator: function (doc) {
 		const colors = {
 			"Przyjęto": "orange",

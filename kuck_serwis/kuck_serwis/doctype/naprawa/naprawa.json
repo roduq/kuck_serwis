@@ -12,7 +12,6 @@
   "klient_email",
   "col_zgloszenie",
   "status",
-  "priorytet",
   "rodzaj_naprawy",
   "sec_zegarek",
   "marka",
@@ -86,15 +85,6 @@
    "label": "Status",
    "options": "Przyjęto\nDiagnoza\nOczekuje na akceptację\nW naprawie\nOczekiwanie na część\nGotowe do odbioru\nWydano\nAnulowano",
    "read_only": 1
-  },
-  {
-   "default": "Normalny",
-   "fieldname": "priorytet",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Priorytet",
-   "options": "Niski\nNormalny\nWysoki\nPilny"
   },
   {
    "fieldname": "rodzaj_naprawy",
@@ -247,6 +237,7 @@
   {
    "fieldname": "kwota_odbioru",
    "fieldtype": "Currency",
+   "in_list_view": 1,
    "label": "Kwota odbioru (finalna)"
   },
   {
