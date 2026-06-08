@@ -1,0 +1,213 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "PZ-.YYYY.-.#####",
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sec_klient",
+  "klient",
+  "klient_nazwa",
+  "klient_telefon",
+  "klient_email",
+  "col_klient",
+  "status",
+  "sec_wspolne",
+  "rodzaj_naprawy",
+  "sposob_dostarczenia",
+  "sposob_odbioru",
+  "col_wspolne",
+  "data_stwierdzenia_usterki",
+  "orientacyjny_termin_naprawy",
+  "nie_powiadamiaj_klienta",
+  "sec_akceptacja",
+  "klient_zaakceptowal",
+  "data_akceptacji",
+  "akceptacja_uwagi",
+  "sec_pozycje",
+  "pozycje"
+ ],
+ "fields": [
+  {
+   "fieldname": "sec_klient",
+   "fieldtype": "Section Break",
+   "label": "Klient"
+  },
+  {
+   "fieldname": "klient",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Klient",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "klient.customer_name",
+   "fieldname": "klient_nazwa",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Klient (nazwa)",
+   "read_only": 1
+  },
+  {
+   "description": "Zaciągane automatycznie z danych klienta. Zmiana zapisze się przy KLIENCIE (Customer), nie w tym przyjęciu.",
+   "fetch_from": "klient.mobile_no",
+   "fetch_if_empty": 1,
+   "fieldname": "klient_telefon",
+   "fieldtype": "Data",
+   "label": "Telefon klienta",
+   "options": "Phone"
+  },
+  {
+   "description": "Zaciągane automatycznie z danych klienta. Zmiana zapisze się przy KLIENCIE (Customer), nie w tym przyjęciu.",
+   "fetch_from": "klient.email_id",
+   "fetch_if_empty": 1,
+   "fieldname": "klient_email",
+   "fieldtype": "Data",
+   "label": "E-mail klienta",
+   "options": "Email"
+  },
+  {
+   "fieldname": "col_klient",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Robocze",
+   "description": "„Robocze” — partia w trakcie wpisywania. „Naprawy utworzone” — naprawy zostały już założone.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Robocze\nNaprawy utworzone",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_wspolne",
+   "fieldtype": "Section Break",
+   "label": "Wspólne ustalenia",
+   "description": "Te pola zostaną przepisane do każdej naprawy utworzonej z tego przyjęcia."
+  },
+  {
+   "fieldname": "rodzaj_naprawy",
+   "fieldtype": "Select",
+   "label": "Rodzaj naprawy",
+   "options": "Gwarancja\nNaprawa długa\nNaprawa krótka\nReklamacja",
+   "reqd": 1
+  },
+  {
+   "default": "Stacjonarnie",
+   "fieldname": "sposob_dostarczenia",
+   "fieldtype": "Select",
+   "label": "Sposób dostarczenia",
+   "options": "Stacjonarnie\nWysyłkowo",
+   "reqd": 1
+  },
+  {
+   "default": "Stacjonarnie",
+   "fieldname": "sposob_odbioru",
+   "fieldtype": "Select",
+   "label": "Sposób odbioru",
+   "options": "Stacjonarnie\nWysyłkowo",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_wspolne",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "data_stwierdzenia_usterki",
+   "fieldtype": "Date",
+   "label": "Data stwierdzenia usterki"
+  },
+  {
+   "fieldname": "orientacyjny_termin_naprawy",
+   "fieldtype": "Date",
+   "label": "Orientacyjny termin naprawy"
+  },
+  {
+   "default": "0",
+   "description": "Zaznacz, aby NIE wysyłać klientowi powiadomień o zmianach w utworzonych naprawach.",
+   "fieldname": "nie_powiadamiaj_klienta",
+   "fieldtype": "Check",
+   "label": "Nie powiadamiaj klienta"
+  },
+  {
+   "fieldname": "sec_akceptacja",
+   "fieldtype": "Section Break",
+   "label": "Akceptacja klienta"
+  },
+  {
+   "default": "0",
+   "description": "Zgoda może być wyrażona z góry przy przyjęciu — przeniesie się na każdą utworzoną naprawę.",
+   "fieldname": "klient_zaakceptowal",
+   "fieldtype": "Check",
+   "label": "Klient zaakceptował naprawę"
+  },
+  {
+   "depends_on": "klient_zaakceptowal",
+   "fieldname": "data_akceptacji",
+   "fieldtype": "Date",
+   "label": "Data akceptacji"
+  },
+  {
+   "depends_on": "klient_zaakceptowal",
+   "description": "Np. „zgoda z góry przy przyjęciu”.",
+   "fieldname": "akceptacja_uwagi",
+   "fieldtype": "Small Text",
+   "label": "Uwagi do akceptacji"
+  },
+  {
+   "fieldname": "sec_pozycje",
+   "fieldtype": "Section Break",
+   "label": "Zegarki"
+  },
+  {
+   "fieldname": "pozycje",
+   "fieldtype": "Table",
+   "label": "Lista zegarków",
+   "options": "Przyjecie Zbiorcze Pozycja",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kuck Serwis",
+ "name": "Przyjecie Zbiorcze",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Serwis",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

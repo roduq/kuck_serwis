@@ -10,7 +10,7 @@
    "label": "Obr\u00f3t serwisu w czasie"
   }
  ],
- "content": "[{\"id\": \"hdr_pulpit\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Pulpit serwisu</span>\", \"col\": 12}}, {\"id\": \"nc_w_toku\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Naprawy w toku\", \"col\": 3}}, {\"id\": \"nc_gotowe\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Gotowe do odbioru\", \"col\": 3}}, {\"id\": \"nc_czesc\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Czeka na cz\u0119\u015b\u0107\", \"col\": 3}}, {\"id\": \"nc_obrot\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Obr\u00f3t w tym miesi\u0105cu\", \"col\": 3}}, {\"id\": \"ch_status\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Naprawy wg statusu\", \"col\": 6}}, {\"id\": \"ch_obrot\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Obr\u00f3t serwisu w czasie\", \"col\": 6}}, {\"id\": \"hdr_serwis\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Serwis zegark\u00f3w</span>\", \"col\": 12}}, {\"id\": \"sc_naprawy\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Naprawy\", \"col\": 3}}, {\"id\": \"sc_klienci\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Klienci\", \"col\": 3}}, {\"id\": \"sc_karta\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Karta klienta\", \"col\": 3}}, {\"id\": \"hdr_listy\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Rejestry</span>\", \"col\": 12}}, {\"id\": \"card_serwis\", \"type\": \"card\", \"data\": {\"card_name\": \"Serwis\", \"col\": 4}}, {\"id\": \"card_slowniki\", \"type\": \"card\", \"data\": {\"card_name\": \"S\u0142owniki\", \"col\": 4}}, {\"id\": \"card_raporty\", \"type\": \"card\", \"data\": {\"card_name\": \"Raporty\", \"col\": 4}}]",
+ "content": "[{\"id\": \"hdr_pulpit\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Pulpit serwisu</span>\", \"col\": 12}}, {\"id\": \"nc_w_toku\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Naprawy w toku\", \"col\": 3}}, {\"id\": \"nc_gotowe\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Gotowe do odbioru\", \"col\": 3}}, {\"id\": \"nc_czesc\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Czeka na cz\u0119\u015b\u0107\", \"col\": 3}}, {\"id\": \"nc_obrot\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Obr\u00f3t w tym miesi\u0105cu\", \"col\": 3}}, {\"id\": \"ch_status\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Naprawy wg statusu\", \"col\": 6}}, {\"id\": \"ch_obrot\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Obr\u00f3t serwisu w czasie\", \"col\": 6}}, {\"id\": \"hdr_serwis\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Serwis zegark\u00f3w</span>\", \"col\": 12}}, {\"id\": \"sc_przyjecie\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Przyj\u0119cie zbiorcze\", \"col\": 3}}, {\"id\": \"sc_naprawy\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Naprawy\", \"col\": 3}}, {\"id\": \"sc_klienci\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Klienci\", \"col\": 3}}, {\"id\": \"sc_karta\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Karta klienta\", \"col\": 3}}, {\"id\": \"hdr_listy\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Rejestry</span>\", \"col\": 12}}, {\"id\": \"card_serwis\", \"type\": \"card\", \"data\": {\"card_name\": \"Serwis\", \"col\": 4}}, {\"id\": \"card_slowniki\", \"type\": \"card\", \"data\": {\"card_name\": \"S\u0142owniki\", \"col\": 4}}, {\"id\": \"card_raporty\", \"type\": \"card\", \"data\": {\"card_name\": \"Raporty\", \"col\": 4}}]",
  "creation": "2026-06-08 19:32:31.113958",
  "custom_blocks": [],
  "docstatus": 0,
@@ -32,6 +32,16 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Przyjęcie zbiorcze",
+   "link_count": 0,
+   "link_to": "Przyjecie Zbiorcze",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -151,6 +161,13 @@
  "roles": [],
  "sequence_id": 1.0,
  "shortcuts": [
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "Przyjęcie zbiorcze",
+   "link_to": "Przyjecie Zbiorcze",
+   "type": "DocType"
+  },
   {
    "color": "Blue",
    "doc_view": "List",

@@ -21,6 +21,18 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "package-plus",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Przyjęcie zbiorcze",
+   "link_to": "Przyjecie Zbiorcze",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "wrench",
    "indent": 0,
    "keep_closed": 0,

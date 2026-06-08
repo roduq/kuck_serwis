@@ -1,0 +1,77 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "marka",
+  "model_zegarka",
+  "numer_seryjny",
+  "opis",
+  "stan_przy_przyjeciu",
+  "zdjecie",
+  "naprawa"
+ ],
+ "fields": [
+  {
+   "fieldname": "marka",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Marka",
+   "options": "Marka Zegarka"
+  },
+  {
+   "fieldname": "model_zegarka",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Model zegarka"
+  },
+  {
+   "fieldname": "numer_seryjny",
+   "fieldtype": "Data",
+   "label": "Numer seryjny / koperty"
+  },
+  {
+   "description": "Krótki opis usterki / zlecenia. Strukturalną listę usterek można dodać później na utworzonej naprawie.",
+   "fieldname": "opis",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Opis usterki / zlecenia"
+  },
+  {
+   "description": "Stan zegarka przy przyjęciu (rysy, wgniecenia, kompletność) — ochrona przy reklamacjach.",
+   "fieldname": "stan_przy_przyjeciu",
+   "fieldtype": "Small Text",
+   "label": "Stan przy przyjęciu"
+  },
+  {
+   "description": "Jedno szybkie zdjęcie przyjęcia. Kolejne zdjęcia można dodać później na utworzonej naprawie.",
+   "fieldname": "zdjecie",
+   "fieldtype": "Attach Image",
+   "label": "Zdjęcie"
+  },
+  {
+   "description": "Naprawa utworzona z tej pozycji. Wypełniane automatycznie po kliknięciu „Utwórz naprawy”.",
+   "fieldname": "naprawa",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Naprawa",
+   "options": "Naprawa",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kuck Serwis",
+ "name": "Przyjecie Zbiorcze Pozycja",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
