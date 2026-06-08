@@ -45,7 +45,7 @@
    "is_query_report": 0,
    "label": "Klienci",
    "link_count": 0,
-   "link_to": "Klient",
+   "link_to": "Customer",
    "link_type": "DocType",
    "onboard": 1,
    "type": "Link"
@@ -137,7 +137,7 @@
    "color": "Green",
    "doc_view": "List",
    "label": "Klienci",
-   "link_to": "Klient",
+   "link_to": "Customer",
    "type": "DocType"
   }
  ],

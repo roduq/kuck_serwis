@@ -47,7 +47,9 @@ def after_install():
 
 def setup_all():
 	create_role()
+	grant_customer_access()
 	set_currency_pln()
+	set_language_pl()
 	create_workflow()
 	create_notifications()
 	frappe.db.commit()
@@ -60,11 +62,33 @@ def create_role():
 		)
 
 
+def grant_customer_access():
+	"""Klient naprawy to ERPNext Customer — recepcja (rola Serwis) musi móc go czytać,
+	zakładać i edytować. ERPNext domyślnie nie daje tej roli dostępu, więc dokładamy
+	Custom DocPerm. Idempotentne — add_permission nie duplikuje istniejącego wpisu.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	if frappe.db.exists("DocType", "Customer"):
+		add_permission("Customer", ROLE, 0)
+		for ptype in ("read", "write", "create"):
+			update_permission_property("Customer", ROLE, 0, ptype, 1)
+
+
 def set_currency_pln():
 	if frappe.db.exists("Currency", "PLN"):
 		frappe.db.set_value("Currency", "PLN", "enabled", 1)
 	if not frappe.db.get_single_value("System Settings", "currency"):
 		frappe.db.set_single_value("System Settings", "currency", "PLN")
+
+
+def set_language_pl():
+	"""Serwis nie zna angielskiego — cały Desk ma być po polsku.
+
+	Frappe ma komplet tłumaczeń `pl`; ustawienie domyślnego języka systemu sprawia,
+	że standardowe komunikaty (przyciski, walidacje, listy) ładują się po polsku.
+	"""
+	frappe.db.set_single_value("System Settings", "language", "pl")
 
 
 def _ensure_workflow_masters():

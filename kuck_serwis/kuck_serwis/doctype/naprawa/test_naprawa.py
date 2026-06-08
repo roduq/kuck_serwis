@@ -16,6 +16,12 @@ from frappe.utils import today
 
 from kuck_serwis import install
 
+# Klient naprawy to ERPNext Customer. Nie pozwalamy frameworkowi auto-generować rekordów
+# testowych Customera — ciągnie to ciężki łańcuch zależności ERPNext (Company, Loyalty
+# Program, Payment Gateway), który wymagałby Setup Wizarda. Klientów w testach tworzymy
+# jawnie (_make_klient), więc te zależności są zbędne.
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Customer"]
+
 
 def _ensure_setup():
 	"""Idempotentnie dokłada rolę/workflow/notyfikacje, jeśli na bazie testowej ich brak.
@@ -31,11 +37,14 @@ def _ensure_setup():
 
 
 def _make_klient(**kwargs):
+	# Klient naprawy to ERPNext Customer; dane kontaktowe trzyma w mobile_no/email_id.
+	# customer_name nazywa rekord, więc dla izolacji testów domyślnie robimy go unikalnym.
 	dane = {
-		"doctype": "Klient",
-		"imie_nazwisko": "Jan Testowy",
-		"telefon": "+48500100200",
-		"email": "jan.testowy@example.com",
+		"doctype": "Customer",
+		"customer_name": "Klient Testowy " + frappe.generate_hash(length=6),
+		"customer_type": "Individual",
+		"mobile_no": "+48500100200",
+		"email_id": "jan.testowy@example.com",
 	}
 	dane.update(kwargs)
 	return frappe.get_doc(dane).insert(ignore_permissions=True)
@@ -120,13 +129,13 @@ class TestNaprawaIntegracja(IntegrationTestCase):
 
 	def test_fetch_from_pobiera_dane_klienta(self):
 		klient = _make_klient(
-			imie_nazwisko="Anna Kowalska",
-			telefon="+48600700800",
-			email="anna.kowalska@example.com",
+			customer_name="Anna Kowalska " + frappe.generate_hash(length=6),
+			mobile_no="+48600700800",
+			email_id="anna.kowalska@example.com",
 		)
 		doc = _make_naprawa(klient=klient.name)
 		doc.insert(ignore_permissions=True)
-		self.assertEqual(doc.klient_nazwa, "Anna Kowalska")
+		self.assertEqual(doc.klient_nazwa, klient.customer_name)
 		self.assertEqual(doc.klient_telefon, "+48600700800")
 		self.assertEqual(doc.klient_email, "anna.kowalska@example.com")
 

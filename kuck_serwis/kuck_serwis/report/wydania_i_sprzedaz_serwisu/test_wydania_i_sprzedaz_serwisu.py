@@ -34,7 +34,12 @@ class TestRaportWydania(IntegrationTestCase):
 		if not frappe.db.exists("Marka Zegarka", MARKA):
 			frappe.get_doc({"doctype": "Marka Zegarka", "nazwa": MARKA}).insert(ignore_permissions=True)
 		klient = frappe.get_doc(
-			{"doctype": "Klient", "imie_nazwisko": "Raport Test", "telefon": "+48111000111"}
+			{
+				"doctype": "Customer",
+				"customer_name": "Raport Test " + frappe.generate_hash(length=6),
+				"customer_type": "Individual",
+				"mobile_no": "+48111000111",
+			}
 		).insert(ignore_permissions=True)
 		cls.klient = klient.name
 
