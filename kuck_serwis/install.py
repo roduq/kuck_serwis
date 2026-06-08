@@ -49,6 +49,7 @@ def setup_all():
 	create_role()
 	set_currency_pln()
 	create_workflow()
+	create_notifications()
 	frappe.db.commit()
 
 
@@ -119,3 +120,71 @@ def create_workflow():
 		)
 
 	doc.save(ignore_permissions=True)
+
+
+# (nazwa, temat, kanał, status wyzwalający, pole z odbiorcą, treść Jinja)
+NOTIFICATIONS = [
+	(
+		"Naprawa - gotowa do odbioru (E-mail)",
+		"Twój zegarek jest gotowy do odbioru — {{ doc.name }}",
+		"Email",
+		"Gotowe do odbioru",
+		"klient_email",
+		"Dzień dobry,\n\n"
+		"Naprawa **{{ doc.name }}** została zakończona — zegarek "
+		"{{ doc.marka or '' }} {{ doc.model_zegarka or '' }} jest gotowy do odbioru.\n"
+		"{% if doc.kwota_odbioru %}Kwota do zapłaty: {{ doc.kwota_odbioru }} zł.\n{% endif %}"
+		"\nZapraszamy,\nSerwis Kuck",
+	),
+	(
+		"Naprawa - gotowa do odbioru (SMS)",
+		"Zegarek gotowy do odbioru — {{ doc.name }}",
+		"SMS",
+		"Gotowe do odbioru",
+		"klient_telefon",
+		"Serwis Kuck: naprawa {{ doc.name }} gotowa do odbioru. Zapraszamy.",
+	),
+	(
+		"Naprawa - wycena do akceptacji (E-mail)",
+		"Wycena naprawy {{ doc.name }} — prosimy o akceptację",
+		"Email",
+		"Oczekuje na akceptację",
+		"klient_email",
+		"Dzień dobry,\n\n"
+		"Dla naprawy {{ doc.name }} przygotowaliśmy orientacyjną wycenę: "
+		"{{ doc.orientacyjna_wycena }} zł.\n"
+		"Prosimy o kontakt i akceptację, abyśmy mogli rozpocząć naprawę.\n\n"
+		"Pozdrawiamy,\nSerwis Kuck",
+	),
+	(
+		"Naprawa - wycena do akceptacji (SMS)",
+		"Wycena naprawy {{ doc.name }}",
+		"SMS",
+		"Oczekuje na akceptację",
+		"klient_telefon",
+		"Serwis Kuck: wycena naprawy {{ doc.name }}: {{ doc.orientacyjna_wycena }} zl. Prosimy o akceptacje.",
+	),
+]
+
+
+def create_notifications():
+	for name, subject, channel, status_value, receiver_field, message in NOTIFICATIONS:
+		condition = f'doc.status == "{status_value}" and not doc.nie_powiadamiaj_klienta'
+		if frappe.db.exists("Notification", name):
+			doc = frappe.get_doc("Notification", name)
+		else:
+			doc = frappe.new_doc("Notification")
+			doc.name = name
+
+		doc.subject = subject
+		doc.channel = channel
+		doc.document_type = "Naprawa"
+		doc.event = "Value Change"
+		doc.value_changed = "status"
+		doc.condition = condition
+		doc.message = message
+		doc.enabled = 1
+		doc.send_system_notification = 0
+
+		doc.set("recipients", [{"receiver_by_document_field": receiver_field}])
+		doc.save(ignore_permissions=True)
