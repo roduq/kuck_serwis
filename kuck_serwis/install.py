@@ -6,6 +6,9 @@ Tworzy rolę Serwis, ustawia walutę PLN oraz buduje Workflow naprawy. Funkcje s
 idempotentne, więc można je bezpiecznie wywołać ponownie (po migracji/aktualizacji).
 """
 
+import json
+import os
+
 import frappe
 
 REPAIR_STATE = "W naprawie"
@@ -67,7 +70,43 @@ def setup_all():
 	set_language_pl()
 	create_workflow()
 	create_notifications()
+	sync_workspaces()
 	frappe.db.commit()
+
+
+# Pliki obszaru roboczego i bocznego menu (względem katalogu modułu kuck_serwis).
+WORKSPACE_FILES = [
+	("workspace", "kuck_serwis", "kuck_serwis.json"),
+	("workspace_sidebar", "kuck_serwis.json"),
+]
+
+
+def sync_workspaces():
+	"""Odświeża Workspace i Workspace Sidebar z plików — `bench migrate` tego NIE robi.
+
+	Frappe ładuje te rekordy z plików tylko przy instalacji; po niej edycje pliku nie trafiają
+	do bazy (lewe menu desku zostaje stare po deployu). Aktualizujemy rekord W MIEJSCU
+	(get + update + save), świadomie BEZ delete+reinsert (np. reload_doc/import_file): w
+	developer_mode kasowanie rekordu kasuje też plik na dysku. Insert robimy tylko, gdy rekordu
+	brak. Idempotentne i bezpieczne także lokalnie.
+	"""
+	for parts in WORKSPACE_FILES:
+		path = frappe.get_app_path("kuck_serwis", *parts)
+		if not os.path.exists(path):
+			continue
+		with open(path, encoding="utf-8") as fh:
+			data = json.load(fh)
+		# pola systemowe odtworzy save(); nie nadpisujemy ich z pliku
+		for pole in ("modified", "modified_by", "creation", "owner", "docstatus", "idx"):
+			data.pop(pole, None)
+		doctype, name = data["doctype"], data["name"]
+		if frappe.db.exists(doctype, name):
+			doc = frappe.get_doc(doctype, name)
+			doc.update(data)
+			doc.flags.ignore_version = True
+			doc.save(ignore_permissions=True)
+		else:
+			frappe.get_doc(data).insert(ignore_permissions=True)
 
 
 def seed_slowniki():
