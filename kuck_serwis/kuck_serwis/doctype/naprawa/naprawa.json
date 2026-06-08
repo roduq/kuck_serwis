@@ -8,6 +8,7 @@
  "field_order": [
   "sec_klient",
   "klient",
+  "klient_nazwa",
   "klient_telefon",
   "klient_email",
   "col_zgloszenie",
@@ -55,6 +56,14 @@
    "label": "Klient",
    "options": "Klient",
    "reqd": 1
+  },
+  {
+   "fetch_from": "klient.imie_nazwisko",
+   "fieldname": "klient_nazwa",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Klient (nazwa)",
+   "read_only": 1
   },
   {
    "fetch_from": "klient.telefon",
