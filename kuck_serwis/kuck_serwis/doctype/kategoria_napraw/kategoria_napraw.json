@@ -7,7 +7,6 @@
  "engine": "InnoDB",
  "field_order": [
   "nazwa",
-  "kategoria",
   "opis"
  ],
  "fields": [
@@ -15,18 +14,9 @@
    "fieldname": "nazwa",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Nazwa usterki",
+   "label": "Nazwa kategorii",
    "reqd": 1,
    "unique": 1
-  },
-  {
-   "fieldname": "kategoria",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Kategoria napraw",
-   "options": "Kategoria Napraw",
-   "reqd": 1
   },
   {
    "fieldname": "opis",
@@ -39,7 +29,7 @@
  "modified": "2026-06-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kuck Serwis",
- "name": "Usterka",
+ "name": "Kategoria Napraw",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [

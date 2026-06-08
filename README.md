@@ -11,7 +11,10 @@ wygodę recepcji — szybkie przyjęcie, czytelny status, jak najmniej klikania 
   reklamacjach), sposób dostarczenia i odbioru, orientacyjna wycena i termin, akceptacja klienta,
   finalna kwota i data wydania.
 - Klient to **ERPNext Customer** (moduł wymaga ERPNext) — wspólna kartoteka z resztą firmy.
-- **Marka Zegarka**, **Usterka** — słowniki z szybkim dodawaniem (Quick Entry).
+- **Marka Zegarka**, **Usterka**, **Kategoria Napraw** — słowniki z szybkim dodawaniem (Quick Entry).
+  Każda **Usterka** (rodzaj naprawy) należy do jednej **Kategorii Napraw** (wymagane pole) — grupowanie
+  do celów statystycznych. Słowniki są **wstępnie wypełniane przy instalacji** danymi z arkuszy
+  klienta (5 kategorii, ~50 usterek z przypisaną kategorią, ~110 marek) — patrz `kuck_serwis/seed.py`.
 - **Workflow „Serwis Naprawa"**: Przyjęto → Diagnoza → Oczekuje na akceptację →
   W naprawie ↔ Oczekiwanie na część → Gotowe do odbioru → Wydano (+ Anulowano).
   Wejście w „W naprawie" wymaga zaznaczonej akceptacji klienta (może być z góry przy przyjęciu).
@@ -40,7 +43,7 @@ Cały dostęp niesie jedna rola: **Serwis**. Żeby dać komuś dostęp do moduł
 mu tę rolę (User → Roles → „Serwis"). Rola obejmuje komplet potrzebnych uprawnień:
 
 - pełny dostęp (odczyt/zapis/tworzenie/usuwanie, druk, raport) do DocType modułu:
-  **Naprawa**, **Marka Zegarka**, **Usterka** oraz raportu wydań;
+  **Naprawa**, **Marka Zegarka**, **Usterka**, **Kategoria Napraw** oraz raportu wydań;
 - dostęp do powiązanych danych **ERPNext**, których ERPNext domyślnie nie udostępnia:
   **Customer**, **Contact**, **Address** (odczyt/zapis/tworzenie, bez usuwania kartotek) oraz
   odczyt słowników **Customer Group**, **Territory**, **Country** (do wyboru w polach Link).

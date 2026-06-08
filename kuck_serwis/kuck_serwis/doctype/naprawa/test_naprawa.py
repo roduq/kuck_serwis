@@ -14,7 +14,7 @@ from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
 from frappe.utils import today
 
-from kuck_serwis import api, install
+from kuck_serwis import api, install, seed
 
 # Klient naprawy to ERPNext Customer. Nie pozwalamy frameworkowi auto-generować rekordów
 # testowych Customera — ciągnie to ciężki łańcuch zależności ERPNext (Company, Loyalty
@@ -270,3 +270,56 @@ class TestKuckSerwisSetup(IntegrationTestCase):
 			self.assertEqual(notif.value_changed, "status")
 			# powiadomienie respektuje wyłącznik recepcji
 			self.assertIn("nie_powiadamiaj_klienta", notif.condition)
+
+
+class TestSeedSlownikow(IntegrationTestCase):
+	"""Seed słowników z arkuszy klienta — kategorie, usterki (z kategorią) i marki.
+
+	seed_all() jest idempotentny i nie commituje, więc rollback testu sprząta po nim.
+	"""
+
+	def test_seed_tworzy_kategorie_usterki_i_marki(self):
+		seed.seed_all()
+
+		# wszystkie kategorie z arkusza istnieją
+		for kategoria in seed.USTERKI_WG_KATEGORII:
+			self.assertTrue(
+				frappe.db.exists("Kategoria Napraw", kategoria),
+				f"brak kategorii: {kategoria}",
+			)
+
+		# każda usterka istnieje i jest przypięta do właściwej kategorii
+		for kategoria, usterki in seed.USTERKI_WG_KATEGORII.items():
+			for usterka in usterki:
+				self.assertEqual(
+					frappe.db.get_value("Usterka", usterka, "kategoria"),
+					kategoria,
+					f"usterka {usterka!r} nie wskazuje na {kategoria!r}",
+				)
+
+		# marki z zestawienia klienta
+		for marka in seed.MARKI:
+			self.assertTrue(
+				frappe.db.exists("Marka Zegarka", marka), f"brak marki: {marka}"
+			)
+
+	def test_seed_jest_idempotentny(self):
+		seed.seed_all()
+		przed = (
+			frappe.db.count("Kategoria Napraw"),
+			frappe.db.count("Usterka"),
+			frappe.db.count("Marka Zegarka"),
+		)
+		seed.seed_all()
+		po = (
+			frappe.db.count("Kategoria Napraw"),
+			frappe.db.count("Usterka"),
+			frappe.db.count("Marka Zegarka"),
+		)
+		self.assertEqual(przed, po)
+
+	def test_kategoria_jest_wymagana_na_usterce(self):
+		# pole kategoria stało się wymagane — usterka bez niej nie może powstać
+		doc = frappe.get_doc({"doctype": "Usterka", "nazwa": "Usterka bez kategorii " + frappe.generate_hash(length=6)})
+		with self.assertRaises(frappe.MandatoryError):
+			doc.insert(ignore_permissions=True)

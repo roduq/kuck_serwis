@@ -57,6 +57,7 @@ EXTERNAL_PERMISSIONS = {
 
 def after_install():
 	setup_all()
+	seed_slowniki()
 
 
 def setup_all():
@@ -66,6 +67,19 @@ def setup_all():
 	set_language_pl()
 	create_workflow()
 	create_notifications()
+	frappe.db.commit()
+
+
+def seed_slowniki():
+	"""Wstępnie wypełnia słowniki (kategorie/usterki/marki) danymi z arkuszy klienta.
+
+	Wywoływane TYLKO przy instalacji (after_install), świadomie poza setup_all — setup_all biegnie
+	też po każdej migracji, a seed ma być jednorazowy: warsztat zarządza słownikami sam, więc nie
+	przywracamy skasowanych/zmienionych pozycji przy kolejnych `migrate`.
+	"""
+	from kuck_serwis import seed
+
+	seed.seed_all()
 	frappe.db.commit()
 
 
