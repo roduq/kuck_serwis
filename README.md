@@ -17,6 +17,11 @@ wygodę recepcji — szybkie przyjęcie, czytelny status, jak najmniej klikania 
   Wejście w „W naprawie" wymaga zaznaczonej akceptacji klienta (może być z góry przy przyjęciu).
 - **Powiadomienia** klienta (E-mail + SMS) przy „wycenie do akceptacji" i „gotowe do odbioru",
   z możliwością wyłączenia per naprawa (checkbox „Nie powiadamiaj klienta").
+- **Karta klienta** — strona Desk z pulpitem jednego klienta: po wybraniu klienta widać jego
+  dane kontaktowe, skrót (liczba napraw, w toku, gotowe do odbioru, łączny obrót) oraz pełną
+  listę napraw z historią (status, rodzaj, zegarek, kwota, daty), klikalną do naprawy.
+  Dostępna ze skrótu w obszarze roboczym oraz przyciskiem „Karta klienta" na formularzu naprawy
+  i klienta. Na formularzu **Customer** dochodzi też grupa powiązań **Serwis → Naprawa**.
 - Rola **Serwis** dla zespołu warsztatu.
 
 #### Konfiguracja po instalacji

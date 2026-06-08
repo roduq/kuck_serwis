@@ -43,6 +43,12 @@ required_apps = ["erpnext"]
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
 
+# Przycisk „Karta klienta" na formularzach Naprawy i klienta — skok do pełnego
+# pulpitu napraw danego klienta (strona Desk karta-klienta).
+doctype_js = {
+	"Naprawa": "public/js/naprawa.js",
+	"Customer": "public/js/customer.js",
+}
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
@@ -201,6 +207,12 @@ after_migrate = "kuck_serwis.install.setup_all"
 # override_doctype_dashboards = {
 # 	"Task": "kuck_serwis.task.get_dashboard_data"
 # }
+
+# Dokładamy grupę „Serwis" → „Naprawa" na pulpicie powiązań formularza Customer,
+# żeby z kartoteki klienta było widać i otworzyć jego naprawy.
+override_doctype_dashboards = {
+	"Customer": "kuck_serwis.overrides.customer_dashboard",
+}
 
 # exempt linked doctypes from being automatically cancelled
 #

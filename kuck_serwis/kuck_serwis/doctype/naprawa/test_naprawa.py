@@ -14,7 +14,7 @@ from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
 from frappe.utils import today
 
-from kuck_serwis import install
+from kuck_serwis import api, install
 
 # Klient naprawy to ERPNext Customer. Nie pozwalamy frameworkowi auto-generować rekordów
 # testowych Customera — ciągnie to ciężki łańcuch zależności ERPNext (Company, Loyalty
@@ -168,6 +168,52 @@ class TestNaprawaIntegracja(IntegrationTestCase):
 		apply_workflow(doc, "Wydaj zegarek")
 		self.assertEqual(doc.status, "Wydano")
 		self.assertEqual(str(doc.data_wydania), today())
+
+
+class TestKartaKlienta(IntegrationTestCase):
+	"""Dane dla strony „Karta klienta" — naprawy jednego klienta i podsumowanie.
+
+	To jest kontrakt API zasilającego pulpit klienta: serwis musi widzieć komplet
+	napraw danego klienta (i tylko jego) oraz poprawne liczniki/obrót.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		_ensure_setup()
+
+	@staticmethod
+	def _naprawa_w_stanie(klient, status, **pola):
+		# Workflow blokuje wstawienie naprawy od razu w docelowym stanie, a tu chodzi tylko
+		# o dane do statystyk — ustawiamy status wprost w bazie (z pominięciem workflow).
+		doc = _make_naprawa(klient=klient)
+		doc.insert(ignore_permissions=True)
+		frappe.db.set_value("Naprawa", doc.name, {"status": status, **pola})
+		return doc
+
+	def test_dane_klienta_zwraca_tylko_jego_naprawy_i_statystyki(self):
+		klient = _make_klient()
+		obcy = _make_klient()
+		# Naprawy badanego klienta w różnych stanach.
+		self._naprawa_w_stanie(klient.name, "Przyjęto")
+		self._naprawa_w_stanie(klient.name, "Gotowe do odbioru")
+		self._naprawa_w_stanie(klient.name, "Wydano", kwota_odbioru=300)
+		self._naprawa_w_stanie(klient.name, "Anulowano")
+		# Naprawa innego klienta nie może trafić do wyniku.
+		self._naprawa_w_stanie(obcy.name, "Wydano", kwota_odbioru=999)
+
+		dane = api.dane_klienta(klient.name)
+
+		self.assertEqual(dane["klient"]["name"], klient.name)
+		self.assertEqual(len(dane["naprawy"]), 4)
+		stat = dane["statystyki"]
+		self.assertEqual(stat["liczba"], 4)
+		self.assertEqual(stat["w_toku"], 2)  # Przyjęto + Gotowe do odbioru (nie Wydano/Anulowano)
+		self.assertEqual(stat["gotowe"], 1)  # Gotowe do odbioru
+		self.assertEqual(stat["obrot"], 300)  # tylko z naprawy „Wydano" tego klienta
+
+	def test_dane_klienta_bez_argumentu_zwraca_pusto(self):
+		self.assertEqual(api.dane_klienta(""), {})
 
 
 class TestKuckSerwisSetup(IntegrationTestCase):
