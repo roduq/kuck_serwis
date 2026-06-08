@@ -6,12 +6,12 @@
    "label": "Naprawy wg statusu"
   },
   {
-   "chart_name": "Obrót serwisu w czasie",
-   "label": "Obrót serwisu w czasie"
+   "chart_name": "Obr\u00f3t serwisu w czasie",
+   "label": "Obr\u00f3t serwisu w czasie"
   }
  ],
- "content": "[{\"id\": \"hdr_pulpit\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Pulpit serwisu</span>\", \"col\": 12}}, {\"id\": \"nc_w_toku\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Naprawy w toku\", \"col\": 3}}, {\"id\": \"nc_gotowe\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Gotowe do odbioru\", \"col\": 3}}, {\"id\": \"nc_czesc\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Czeka na część\", \"col\": 3}}, {\"id\": \"nc_obrot\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Obrót w tym miesiącu\", \"col\": 3}}, {\"id\": \"ch_status\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Naprawy wg statusu\", \"col\": 6}}, {\"id\": \"ch_obrot\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Obrót serwisu w czasie\", \"col\": 6}}, {\"id\": \"hdr_serwis\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Serwis zegarków</span>\", \"col\": 12}}, {\"id\": \"sc_naprawy\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Naprawy\", \"col\": 3}}, {\"id\": \"sc_klienci\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Klienci\", \"col\": 3}}, {\"id\": \"sc_karta\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Karta klienta\", \"col\": 3}}, {\"id\": \"hdr_listy\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Rejestry</span>\", \"col\": 12}}, {\"id\": \"card_serwis\", \"type\": \"card\", \"data\": {\"card_name\": \"Serwis\", \"col\": 4}}, {\"id\": \"card_slowniki\", \"type\": \"card\", \"data\": {\"card_name\": \"Słowniki\", \"col\": 4}}, {\"id\": \"card_raporty\", \"type\": \"card\", \"data\": {\"card_name\": \"Raporty\", \"col\": 4}}]",
- "creation": "2026-06-08 12:00:00.000000",
+ "content": "[{\"id\": \"hdr_pulpit\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Pulpit serwisu</span>\", \"col\": 12}}, {\"id\": \"nc_w_toku\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Naprawy w toku\", \"col\": 3}}, {\"id\": \"nc_gotowe\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Gotowe do odbioru\", \"col\": 3}}, {\"id\": \"nc_czesc\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Czeka na cz\u0119\u015b\u0107\", \"col\": 3}}, {\"id\": \"nc_obrot\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Obr\u00f3t w tym miesi\u0105cu\", \"col\": 3}}, {\"id\": \"ch_status\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Naprawy wg statusu\", \"col\": 6}}, {\"id\": \"ch_obrot\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Obr\u00f3t serwisu w czasie\", \"col\": 6}}, {\"id\": \"hdr_serwis\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Serwis zegark\u00f3w</span>\", \"col\": 12}}, {\"id\": \"sc_naprawy\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Naprawy\", \"col\": 3}}, {\"id\": \"sc_klienci\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Klienci\", \"col\": 3}}, {\"id\": \"sc_karta\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Karta klienta\", \"col\": 3}}, {\"id\": \"hdr_listy\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Rejestry</span>\", \"col\": 12}}, {\"id\": \"card_serwis\", \"type\": \"card\", \"data\": {\"card_name\": \"Serwis\", \"col\": 4}}, {\"id\": \"card_slowniki\", \"type\": \"card\", \"data\": {\"card_name\": \"S\u0142owniki\", \"col\": 4}}, {\"id\": \"card_raporty\", \"type\": \"card\", \"data\": {\"card_name\": \"Raporty\", \"col\": 4}}]",
+ "creation": "2026-06-08 19:32:31.113958",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -19,14 +19,17 @@
  "hide_custom": 0,
  "icon": "tool",
  "idx": 0,
+ "indicator_color": "green",
  "is_hidden": 0,
  "label": "Kuck Serwis",
+ "link_type": "DocType",
  "links": [
   {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Serwis",
    "link_count": 0,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -53,8 +56,19 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Słowniki",
+   "label": "Karta klienta",
    "link_count": 0,
+   "link_to": "karta-klienta",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "S\u0142owniki",
+   "link_count": 0,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -71,7 +85,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Marki zegarków",
+   "label": "Marki zegark\u00f3w",
    "link_count": 0,
    "link_to": "Marka Zegarka",
    "link_type": "DocType",
@@ -83,13 +97,14 @@
    "is_query_report": 0,
    "label": "Raporty",
    "link_count": 0,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
   {
    "hidden": 0,
    "is_query_report": 1,
-   "label": "Wydania i sprzedaż serwisu",
+   "label": "Wydania i sprzeda\u017c serwisu",
    "link_count": 0,
    "link_to": "Wydania i sprzedaz serwisu",
    "link_type": "Report",
@@ -97,7 +112,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-08 13:40:24.156190",
+ "modified": "2026-06-08 19:32:31.113958",
  "modified_by": "Administrator",
  "module": "Kuck Serwis",
  "name": "Kuck Serwis",
@@ -111,12 +126,12 @@
    "number_card_name": "Gotowe do odbioru"
   },
   {
-   "label": "Czeka na część",
-   "number_card_name": "Czeka na część"
+   "label": "Czeka na cz\u0119\u015b\u0107",
+   "number_card_name": "Czeka na cz\u0119\u015b\u0107"
   },
   {
-   "label": "Obrót w tym miesiącu",
-   "number_card_name": "Obrót w tym miesiącu"
+   "label": "Obr\u00f3t w tym miesi\u0105cu",
+   "number_card_name": "Obr\u00f3t w tym miesi\u0105cu"
   }
  ],
  "owner": "Administrator",
@@ -142,10 +157,12 @@
   },
   {
    "color": "Grey",
+   "doc_view": "",
    "label": "Karta klienta",
    "link_to": "karta-klienta",
    "type": "Page"
   }
  ],
- "title": "Kuck Serwis"
+ "title": "Kuck Serwis",
+ "type": "Workspace"
 }
