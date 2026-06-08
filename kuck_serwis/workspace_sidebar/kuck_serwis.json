@@ -1,12 +1,14 @@
 {
  "app": "kuck_serwis",
+ "creation": "2026-06-08 19:32:42.359122",
+ "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "wrench",
+ "idx": 0,
  "items": [
   {
    "child": 0,
    "collapsible": 1,
-   "doctype": "Workspace Sidebar Item",
    "icon": "layout-dashboard",
    "indent": 0,
    "keep_closed": 0,
@@ -19,7 +21,6 @@
   {
    "child": 0,
    "collapsible": 1,
-   "doctype": "Workspace Sidebar Item",
    "icon": "wrench",
    "indent": 0,
    "keep_closed": 0,
@@ -32,7 +33,6 @@
   {
    "child": 0,
    "collapsible": 1,
-   "doctype": "Workspace Sidebar Item",
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
@@ -45,7 +45,18 @@
   {
    "child": 0,
    "collapsible": 1,
-   "doctype": "Workspace Sidebar Item",
+   "icon": "id-card",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Karta klienta",
+   "link_to": "karta-klienta",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "bar-chart-3",
    "indent": 0,
    "keep_closed": 0,
@@ -56,8 +67,11 @@
    "type": "Link"
   }
  ],
+ "modified": "2026-06-08 19:37:01.116165",
+ "modified_by": "Administrator",
  "module": "Kuck Serwis",
  "name": "Kuck Serwis",
+ "owner": "Administrator",
  "standard": 1,
  "title": "Kuck Serwis"
 }
