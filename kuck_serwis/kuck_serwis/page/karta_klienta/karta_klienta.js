@@ -38,19 +38,21 @@ class KartaKlienta {
 	constructor(page) {
 		this.page = page;
 		this.klient = null;
-		this.render_szkielet();
+		// Pole wyboru klienta musi powstać przed renderem treści — `add_field` dokłada je do
+		// `page_form` (prepend w page.main); gdybyśmy nadpisali main przez .html(), zniknęłoby.
 		this.dodaj_pole_klienta();
+		this.render_szkielet();
 	}
 
 	render_szkielet() {
-		this.page.main.html(`
-			<div class="karta-klienta">
+		this.$body = $(`
+			<div class="karta-klienta" style="margin-top: 15px;">
 				<div class="kk-podsumowanie row" style="margin: 0 0 15px;"></div>
 				<div class="kk-naprawy"></div>
 			</div>
-		`);
-		this.$podsumowanie = this.page.main.find(".kk-podsumowanie");
-		this.$naprawy = this.page.main.find(".kk-naprawy");
+		`).appendTo(this.page.main);
+		this.$podsumowanie = this.$body.find(".kk-podsumowanie");
+		this.$naprawy = this.$body.find(".kk-naprawy");
 		this.pokaz_pusto(__("Wybierz klienta, aby zobaczyć jego naprawy."));
 	}
 
