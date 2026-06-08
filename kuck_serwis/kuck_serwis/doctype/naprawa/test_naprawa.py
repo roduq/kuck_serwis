@@ -30,6 +30,7 @@ def _ensure_setup():
 	rollback izolujący testy. Te funkcje nie commitują.
 	"""
 	install.create_role()
+	install.grant_external_access()
 	if not frappe.db.exists("Workflow", "Serwis Naprawa"):
 		install.create_workflow()
 	if not frappe.db.exists("Notification", "Naprawa - gotowa do odbioru (E-mail)"):
@@ -179,6 +180,21 @@ class TestKuckSerwisSetup(IntegrationTestCase):
 
 	def test_rola_serwis_istnieje(self):
 		self.assertTrue(frappe.db.exists("Role", "Serwis"))
+
+	def test_rola_serwis_ma_dostep_do_erpnext(self):
+		"""Rola Serwis musi mieć dostęp do Customer i powiązanych danych ERPNext —
+		inaczej recepcja nie założy/nie edytuje klienta, kontaktu ani adresu.
+		Sprawdzamy Custom DocPerm nadane przez grant_external_access."""
+		for doctype, ptypes in install.EXTERNAL_PERMISSIONS.items():
+			perm = frappe.db.get_value(
+				"Custom DocPerm",
+				{"parent": doctype, "role": install.ROLE, "permlevel": 0},
+				["read", "write", "create"],
+				as_dict=True,
+			)
+			self.assertIsNotNone(perm, f"brak Custom DocPerm dla roli Serwis na {doctype}")
+			for ptype in ptypes:
+				self.assertTrue(perm.get(ptype), f"rola Serwis nie ma '{ptype}' na {doctype}")
 
 	def test_workflow_aktywny_z_kompletem_stanow(self):
 		wf = frappe.get_doc("Workflow", "Serwis Naprawa")

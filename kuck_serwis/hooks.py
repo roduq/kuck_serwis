@@ -92,6 +92,10 @@ importable_doctypes = ["Number Card", "Dashboard Chart"]
 # before_install = "kuck_serwis.install.before_install"
 after_install = "kuck_serwis.install.after_install"
 
+# Konfiguracja modułu jest idempotentna — odtwarzamy ją po każdej migracji, żeby uprawnienia
+# roli Serwis (także do doctypów ERPNext) przetrwały aktualizacje i resynchronizację.
+after_migrate = "kuck_serwis.install.setup_all"
+
 # Uninstallation
 # ------------
 

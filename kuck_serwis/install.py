@@ -40,6 +40,20 @@ WORKFLOW_TRANSITIONS = [
 
 ROLE = "Serwis"
 
+# Rola Serwis musi sięgać do danych ERPNext, których ERPNext domyślnie jej nie udostępnia.
+# Klient naprawy to Customer, jego dane kontaktowe żyją w Contact, a adresy (wysyłka) w Address.
+# read/write/create wystarcza recepcji — bez delete (nie kasujemy kartotek klientów). Doctypy
+# słownikowe (Customer Group / Territory / Country) dostają samo read, by dało się je wskazać
+# w polach Link przy zakładaniu klienta/adresu.
+EXTERNAL_PERMISSIONS = {
+	"Customer": ("read", "write", "create"),
+	"Contact": ("read", "write", "create"),
+	"Address": ("read", "write", "create"),
+	"Customer Group": ("read",),
+	"Territory": ("read",),
+	"Country": ("read",),
+}
+
 
 def after_install():
 	setup_all()
@@ -47,7 +61,7 @@ def after_install():
 
 def setup_all():
 	create_role()
-	grant_customer_access()
+	grant_external_access()
 	set_currency_pln()
 	set_language_pl()
 	create_workflow()
@@ -62,17 +76,21 @@ def create_role():
 		)
 
 
-def grant_customer_access():
-	"""Klient naprawy to ERPNext Customer — recepcja (rola Serwis) musi móc go czytać,
-	zakładać i edytować. ERPNext domyślnie nie daje tej roli dostępu, więc dokładamy
-	Custom DocPerm. Idempotentne — add_permission nie duplikuje istniejącego wpisu.
+def grant_external_access():
+	"""Nadaje roli Serwis dostęp do doctypów ERPNext potrzebnych recepcji (Customer i powiązane).
+
+	ERPNext domyślnie nie daje tej roli żadnego dostępu, więc dokładamy Custom DocPerm dla
+	każdego wpisu z EXTERNAL_PERMISSIONS. Idempotentne — add_permission nie duplikuje
+	istniejącego wpisu, a update_permission_property tylko ustawia flagi.
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	if frappe.db.exists("DocType", "Customer"):
-		add_permission("Customer", ROLE, 0)
-		for ptype in ("read", "write", "create"):
-			update_permission_property("Customer", ROLE, 0, ptype, 1)
+	for doctype, ptypes in EXTERNAL_PERMISSIONS.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		add_permission(doctype, ROLE, 0)
+		for ptype in ptypes:
+			update_permission_property(doctype, ROLE, 0, ptype, 1)
 
 
 def set_currency_pln():

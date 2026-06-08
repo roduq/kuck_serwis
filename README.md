@@ -5,12 +5,13 @@ wygodę recepcji — szybkie przyjęcie, czytelny status, jak najmniej klikania 
 
 #### Co zawiera
 
-- **Naprawa** — główne zlecenie. Klient (jako referencja, z podglądem telefonu/e-maila),
-  identyfikacja zegarka (marka / model / nr seryjny), lista usterek (słownik, multiselect),
-  opis, **stan przy przyjęciu + zdjęcia** (ochrona przy reklamacjach), sposób dostarczenia
-  i odbioru, orientacyjna wycena i termin, akceptacja klienta, finalna kwota i data wydania.
-- **Klient**, **Marka Zegarka**, **Usterka** — słowniki z szybkim dodawaniem (Quick Entry).
-  Karta klienta pokazuje powiązane naprawy.
+- **Naprawa** — główne zlecenie. Klient (ERPNext **Customer**, z edytowalnym telefonem/e-mailem
+  zapisywanym z powrotem przy kliencie), identyfikacja zegarka (marka / model / nr seryjny),
+  lista usterek (słownik, multiselect), opis, **stan przy przyjęciu + zdjęcia** (ochrona przy
+  reklamacjach), sposób dostarczenia i odbioru, orientacyjna wycena i termin, akceptacja klienta,
+  finalna kwota i data wydania.
+- Klient to **ERPNext Customer** (moduł wymaga ERPNext) — wspólna kartoteka z resztą firmy.
+- **Marka Zegarka**, **Usterka** — słowniki z szybkim dodawaniem (Quick Entry).
 - **Workflow „Serwis Naprawa"**: Przyjęto → Diagnoza → Oczekuje na akceptację →
   W naprawie ↔ Oczekiwanie na część → Gotowe do odbioru → Wydano (+ Anulowano).
   Wejście w „W naprawie" wymaga zaznaczonej akceptacji klienta (może być z góry przy przyjęciu).
@@ -27,6 +28,20 @@ i powiadomienia. Aby powiadomienia faktycznie wychodziły, skonfiguruj w Frappe:
 - **SMS**: SMS Settings (bramka SMS) — stockowy mechanizm Frappe.
 
 Brak skonfigurowanej bramki **nie blokuje** zmian statusu — nieudana wysyłka trafia tylko do Error Log.
+
+#### Uprawnienia — dostęp dla zespołu serwisu
+
+Cały dostęp niesie jedna rola: **Serwis**. Żeby dać komuś dostęp do modułu, wystarczy przypisać
+mu tę rolę (User → Roles → „Serwis"). Rola obejmuje komplet potrzebnych uprawnień:
+
+- pełny dostęp (odczyt/zapis/tworzenie/usuwanie, druk, raport) do DocType modułu:
+  **Naprawa**, **Marka Zegarka**, **Usterka** oraz raportu wydań;
+- dostęp do powiązanych danych **ERPNext**, których ERPNext domyślnie nie udostępnia:
+  **Customer**, **Contact**, **Address** (odczyt/zapis/tworzenie, bez usuwania kartotek) oraz
+  odczyt słowników **Customer Group**, **Territory**, **Country** (do wyboru w polach Link).
+
+Uprawnienia nadawane są jako Custom DocPerm i **odtwarzają się idempotentnie** przy każdej
+migracji (`after_migrate` → `install.setup_all`), więc przetrwają aktualizacje i resync.
 
 ### Installation
 
