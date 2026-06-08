@@ -86,7 +86,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "kuck_serwis.install.before_install"
-# after_install = "kuck_serwis.install.after_install"
+after_install = "kuck_serwis.install.after_install"
 
 # Uninstallation
 # ------------
