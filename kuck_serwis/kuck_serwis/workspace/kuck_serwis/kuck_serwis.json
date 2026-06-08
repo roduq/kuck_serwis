@@ -1,0 +1,100 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"hdr_serwis\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Serwis zegarków</span>\",\"col\":12}},{\"id\":\"sc_naprawy\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Naprawy\",\"col\":3}},{\"id\":\"sc_klienci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Klienci\",\"col\":3}},{\"id\":\"hdr_listy\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Rejestry</span>\",\"col\":12}},{\"id\":\"card_serwis\",\"type\":\"card\",\"data\":{\"card_name\":\"Serwis\",\"col\":4}},{\"id\":\"card_slowniki\",\"type\":\"card\",\"data\":{\"card_name\":\"Słowniki\",\"col\":4}}]",
+ "creation": "2026-06-08 12:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "tool",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Kuck Serwis",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Serwis",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Naprawy",
+   "link_count": 0,
+   "link_to": "Naprawa",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Klienci",
+   "link_count": 0,
+   "link_to": "Klient",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Słowniki",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Usterki",
+   "link_count": 0,
+   "link_to": "Usterka",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Marki zegarków",
+   "link_count": 0,
+   "link_to": "Marka Zegarka",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kuck Serwis",
+ "name": "Kuck Serwis",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Naprawy",
+   "link_to": "Naprawa",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Klienci",
+   "link_to": "Klient",
+   "type": "DocType"
+  }
+ ],
+ "title": "Kuck Serwis"
+}
