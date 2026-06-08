@@ -51,7 +51,13 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Serwis",
+   "link_doctype": "Naprawa",
+   "link_fieldname": "klient"
+  }
+ ],
  "modified": "2026-06-08 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Kuck Serwis",

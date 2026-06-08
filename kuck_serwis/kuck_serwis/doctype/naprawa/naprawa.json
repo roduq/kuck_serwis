@@ -1,0 +1,296 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "NAP-.YYYY.-.#####",
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sec_klient",
+  "klient",
+  "klient_telefon",
+  "klient_email",
+  "col_zgloszenie",
+  "status",
+  "priorytet",
+  "rodzaj_naprawy",
+  "sec_zegarek",
+  "marka",
+  "model_zegarka",
+  "numer_seryjny",
+  "col_zegarek",
+  "data_zakupu",
+  "data_stwierdzenia_usterki",
+  "sec_usterki",
+  "usterki",
+  "opis_naprawy",
+  "stan_przy_przyjeciu",
+  "zdjecia",
+  "sec_dostawa",
+  "sposob_dostarczenia",
+  "sposob_odbioru",
+  "col_dostawa",
+  "nie_powiadamiaj_klienta",
+  "sec_wycena",
+  "orientacyjna_wycena",
+  "orientacyjny_termin_naprawy",
+  "col_wycena",
+  "klient_zaakceptowal",
+  "data_akceptacji",
+  "akceptacja_uwagi",
+  "sec_wydanie",
+  "kwota_odbioru",
+  "data_wydania"
+ ],
+ "fields": [
+  {
+   "fieldname": "sec_klient",
+   "fieldtype": "Section Break",
+   "label": "Klient i zgłoszenie"
+  },
+  {
+   "fieldname": "klient",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Klient",
+   "options": "Klient",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "klient.telefon",
+   "fieldname": "klient_telefon",
+   "fieldtype": "Data",
+   "label": "Telefon klienta",
+   "options": "Phone",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "klient.email",
+   "fieldname": "klient_email",
+   "fieldtype": "Data",
+   "label": "E-mail klienta",
+   "options": "Email",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_zgloszenie",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Przyjęto",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Przyjęto\nDiagnoza\nOczekuje na akceptację\nW naprawie\nOczekiwanie na część\nGotowe do odbioru\nWydano\nAnulowano",
+   "read_only": 1
+  },
+  {
+   "default": "Normalny",
+   "fieldname": "priorytet",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Priorytet",
+   "options": "Niski\nNormalny\nWysoki\nPilny"
+  },
+  {
+   "fieldname": "rodzaj_naprawy",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Rodzaj naprawy",
+   "options": "Gwarancja\nNaprawa długa\nNaprawa krótka\nReklamacja",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_zegarek",
+   "fieldtype": "Section Break",
+   "label": "Zegarek"
+  },
+  {
+   "fieldname": "marka",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Marka",
+   "options": "Marka Zegarka"
+  },
+  {
+   "fieldname": "model_zegarka",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Model zegarka"
+  },
+  {
+   "fieldname": "numer_seryjny",
+   "fieldtype": "Data",
+   "label": "Numer seryjny / koperty"
+  },
+  {
+   "fieldname": "col_zegarek",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "data_zakupu",
+   "fieldtype": "Date",
+   "label": "Data zakupu zegarka"
+  },
+  {
+   "fieldname": "data_stwierdzenia_usterki",
+   "fieldtype": "Date",
+   "label": "Data stwierdzenia usterki"
+  },
+  {
+   "fieldname": "sec_usterki",
+   "fieldtype": "Section Break",
+   "label": "Usterki i opis"
+  },
+  {
+   "fieldname": "usterki",
+   "fieldtype": "Table MultiSelect",
+   "label": "Lista usterek",
+   "options": "Naprawa Usterka"
+  },
+  {
+   "fieldname": "opis_naprawy",
+   "fieldtype": "Text",
+   "label": "Opis naprawy"
+  },
+  {
+   "description": "Opis stanu zegarka w chwili przyjęcia (rysy, wgniecenia, kompletność) — ochrona przy reklamacjach.",
+   "fieldname": "stan_przy_przyjeciu",
+   "fieldtype": "Text",
+   "label": "Stan przy przyjęciu"
+  },
+  {
+   "fieldname": "zdjecia",
+   "fieldtype": "Table",
+   "label": "Zdjęcia przyjęcia",
+   "options": "Naprawa Zdjecie"
+  },
+  {
+   "fieldname": "sec_dostawa",
+   "fieldtype": "Section Break",
+   "label": "Dostawa i odbiór"
+  },
+  {
+   "default": "Stacjonarnie",
+   "fieldname": "sposob_dostarczenia",
+   "fieldtype": "Select",
+   "label": "Sposób dostarczenia",
+   "options": "Stacjonarnie\nWysyłkowo",
+   "reqd": 1
+  },
+  {
+   "default": "Stacjonarnie",
+   "fieldname": "sposob_odbioru",
+   "fieldtype": "Select",
+   "label": "Sposób odbioru",
+   "options": "Stacjonarnie\nWysyłkowo",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_dostawa",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Zaznacz, aby NIE wysyłać klientowi powiadomień o zmianach w tej naprawie.",
+   "fieldname": "nie_powiadamiaj_klienta",
+   "fieldtype": "Check",
+   "label": "Nie powiadamiaj klienta"
+  },
+  {
+   "fieldname": "sec_wycena",
+   "fieldtype": "Section Break",
+   "label": "Wycena i akceptacja"
+  },
+  {
+   "fieldname": "orientacyjna_wycena",
+   "fieldtype": "Currency",
+   "label": "Orientacyjna wycena"
+  },
+  {
+   "fieldname": "orientacyjny_termin_naprawy",
+   "fieldtype": "Date",
+   "label": "Orientacyjny termin naprawy"
+  },
+  {
+   "fieldname": "col_wycena",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "klient_zaakceptowal",
+   "fieldtype": "Check",
+   "label": "Klient zaakceptował naprawę"
+  },
+  {
+   "depends_on": "klient_zaakceptowal",
+   "fieldname": "data_akceptacji",
+   "fieldtype": "Date",
+   "label": "Data akceptacji"
+  },
+  {
+   "depends_on": "klient_zaakceptowal",
+   "description": "Np. „zgoda z góry przy przyjęciu” lub „zgoda na kwoty ~ orientacyjnej wyceny”.",
+   "fieldname": "akceptacja_uwagi",
+   "fieldtype": "Small Text",
+   "label": "Uwagi do akceptacji"
+  },
+  {
+   "fieldname": "sec_wydanie",
+   "fieldtype": "Section Break",
+   "label": "Wydanie"
+  },
+  {
+   "fieldname": "kwota_odbioru",
+   "fieldtype": "Currency",
+   "label": "Kwota odbioru (finalna)"
+  },
+  {
+   "fieldname": "data_wydania",
+   "fieldtype": "Date",
+   "label": "Data wydania zegarka"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kuck Serwis",
+ "name": "Naprawa",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Serwis",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
