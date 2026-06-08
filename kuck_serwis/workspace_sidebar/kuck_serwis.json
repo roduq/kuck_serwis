@@ -1,0 +1,63 @@
+{
+ "app": "kuck_serwis",
+ "doctype": "Workspace Sidebar",
+ "header_icon": "wrench",
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "doctype": "Workspace Sidebar Item",
+   "icon": "layout-dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Pulpit serwisu",
+   "link_to": "Kuck Serwis",
+   "link_type": "Workspace",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "doctype": "Workspace Sidebar Item",
+   "icon": "wrench",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Naprawy",
+   "link_to": "Naprawa",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "doctype": "Workspace Sidebar Item",
+   "icon": "users",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Klienci",
+   "link_to": "Klient",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "doctype": "Workspace Sidebar Item",
+   "icon": "bar-chart-3",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Wydania i sprzeda\u017c serwisu",
+   "link_to": "Wydania i sprzedaz serwisu",
+   "link_type": "Report",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "module": "Kuck Serwis",
+ "name": "Kuck Serwis",
+ "standard": 1,
+ "title": "Kuck Serwis"
+}

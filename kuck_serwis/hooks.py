@@ -71,7 +71,10 @@ app_license = "mit"
 # website_generators = ["Web Page"]
 
 # automatically load and sync documents of this doctype from downstream apps
-# importable_doctypes = [doctype_1]
+# Number Card / Dashboard Chart nie są w domyślnym zestawie synchronizowanym przez
+# `bench migrate` — rejestrujemy je tu, by pliki pulpitu (number_card/, dashboard_chart/)
+# wczytywały się tak samo jak Report czy Print Format.
+importable_doctypes = ["Number Card", "Dashboard Chart"]
 
 # Jinja
 # ----------

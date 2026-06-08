@@ -1,6 +1,16 @@
 {
- "charts": [],
- "content": "[{\"id\":\"hdr_serwis\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Serwis zegarków</span>\",\"col\":12}},{\"id\":\"sc_naprawy\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Naprawy\",\"col\":3}},{\"id\":\"sc_klienci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Klienci\",\"col\":3}},{\"id\":\"hdr_listy\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Rejestry</span>\",\"col\":12}},{\"id\":\"card_serwis\",\"type\":\"card\",\"data\":{\"card_name\":\"Serwis\",\"col\":4}},{\"id\":\"card_slowniki\",\"type\":\"card\",\"data\":{\"card_name\":\"Słowniki\",\"col\":4}},{\"id\":\"card_raporty\",\"type\":\"card\",\"data\":{\"card_name\":\"Raporty\",\"col\":4}}]",
+ "app": "kuck_serwis",
+ "charts": [
+  {
+   "chart_name": "Naprawy wg statusu",
+   "label": "Naprawy wg statusu"
+  },
+  {
+   "chart_name": "Obrót serwisu w czasie",
+   "label": "Obrót serwisu w czasie"
+  }
+ ],
+ "content": "[{\"id\": \"hdr_pulpit\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Pulpit serwisu</span>\", \"col\": 12}}, {\"id\": \"nc_w_toku\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Naprawy w toku\", \"col\": 3}}, {\"id\": \"nc_gotowe\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Gotowe do odbioru\", \"col\": 3}}, {\"id\": \"nc_czesc\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Czeka na część\", \"col\": 3}}, {\"id\": \"nc_obrot\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Obrót w tym miesiącu\", \"col\": 3}}, {\"id\": \"ch_status\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Naprawy wg statusu\", \"col\": 6}}, {\"id\": \"ch_obrot\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Obrót serwisu w czasie\", \"col\": 6}}, {\"id\": \"hdr_serwis\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Serwis zegarków</span>\", \"col\": 12}}, {\"id\": \"sc_naprawy\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Naprawy\", \"col\": 3}}, {\"id\": \"sc_klienci\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Klienci\", \"col\": 3}}, {\"id\": \"hdr_listy\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Rejestry</span>\", \"col\": 12}}, {\"id\": \"card_serwis\", \"type\": \"card\", \"data\": {\"card_name\": \"Serwis\", \"col\": 4}}, {\"id\": \"card_slowniki\", \"type\": \"card\", \"data\": {\"card_name\": \"Słowniki\", \"col\": 4}}, {\"id\": \"card_raporty\", \"type\": \"card\", \"data\": {\"card_name\": \"Raporty\", \"col\": 4}}]",
  "creation": "2026-06-08 12:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -87,11 +97,28 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-08 12:00:00.000000",
+ "modified": "2026-06-08 13:40:24.156190",
  "modified_by": "Administrator",
  "module": "Kuck Serwis",
  "name": "Kuck Serwis",
- "number_cards": [],
+ "number_cards": [
+  {
+   "label": "Naprawy w toku",
+   "number_card_name": "Naprawy w toku"
+  },
+  {
+   "label": "Gotowe do odbioru",
+   "number_card_name": "Gotowe do odbioru"
+  },
+  {
+   "label": "Czeka na część",
+   "number_card_name": "Czeka na część"
+  },
+  {
+   "label": "Obrót w tym miesiącu",
+   "number_card_name": "Obrót w tym miesiącu"
+  }
+ ],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
