@@ -37,6 +37,12 @@ frappe.query_reports["Wydania i sprzedaz serwisu"] = {
 			options: "Marka Zegarka",
 		},
 		{
+			fieldname: "kategoria",
+			label: __("Kategoria napraw"),
+			fieldtype: "Link",
+			options: "Kategoria Napraw",
+		},
+		{
 			fieldname: "dni_tygodnia",
 			label: __("Dni tygodnia"),
 			fieldtype: "MultiSelectList",

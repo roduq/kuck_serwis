@@ -23,6 +23,7 @@
   "data_stwierdzenia_usterki",
   "sec_usterki",
   "usterki",
+  "kategoria_glowna",
   "opis_naprawy",
   "stan_przy_przyjeciu",
   "zdjecia",
@@ -30,7 +31,8 @@
   "sposob_dostarczenia",
   "sposob_odbioru",
   "col_dostawa",
-  "nie_powiadamiaj_klienta",
+  "powiadom_sms",
+  "powiadom_email",
   "sec_wycena",
   "orientacyjna_wycena",
   "orientacyjny_termin_naprawy",
@@ -154,6 +156,14 @@
    "options": "Naprawa Usterka"
   },
   {
+   "description": "Kategoria dominująca wśród wybranych usterek — uzupełnia się automatycznie, można poprawić. Służy do rozbicia sprzedaży po kategoriach w raporcie wydań.",
+   "fieldname": "kategoria_glowna",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Kategoria główna",
+   "options": "Kategoria Napraw"
+  },
+  {
    "fieldname": "opis_naprawy",
    "fieldtype": "Text",
    "label": "Opis naprawy"
@@ -197,10 +207,17 @@
   },
   {
    "default": "0",
-   "description": "Zaznacz, aby NIE wysyłać klientowi powiadomień o zmianach w tej naprawie.",
-   "fieldname": "nie_powiadamiaj_klienta",
+   "description": "Zaznacz, aby wysyłać klientowi SMS przy zmianach statusu (wycena do akceptacji, gotowe do odbioru). Wymaga numeru telefonu.",
+   "fieldname": "powiadom_sms",
    "fieldtype": "Check",
-   "label": "Nie powiadamiaj klienta"
+   "label": "Powiadamiaj SMS-em"
+  },
+  {
+   "default": "0",
+   "description": "Zaznacz, aby wysyłać klientowi e-mail przy zmianach statusu (wycena do akceptacji, gotowe do odbioru). Wymaga adresu e-mail.",
+   "fieldname": "powiadom_email",
+   "fieldtype": "Check",
+   "label": "Powiadamiaj e-mailem"
   },
   {
    "fieldname": "sec_wycena",

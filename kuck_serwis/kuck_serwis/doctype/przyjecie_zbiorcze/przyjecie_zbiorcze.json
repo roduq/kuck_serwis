@@ -20,7 +20,8 @@
   "col_wspolne",
   "data_stwierdzenia_usterki",
   "orientacyjny_termin_naprawy",
-  "nie_powiadamiaj_klienta",
+  "powiadom_sms",
+  "powiadom_email",
   "sec_akceptacja",
   "klient_zaakceptowal",
   "data_akceptacji",
@@ -129,10 +130,17 @@
   },
   {
    "default": "0",
-   "description": "Zaznacz, aby NIE wysyłać klientowi powiadomień o zmianach w utworzonych naprawach.",
-   "fieldname": "nie_powiadamiaj_klienta",
+   "description": "Zaznacz, aby wysyłać klientowi SMS przy zmianach statusu w utworzonych naprawach. Wymaga numeru telefonu.",
+   "fieldname": "powiadom_sms",
    "fieldtype": "Check",
-   "label": "Nie powiadamiaj klienta"
+   "label": "Powiadamiaj SMS-em"
+  },
+  {
+   "default": "0",
+   "description": "Zaznacz, aby wysyłać klientowi e-mail przy zmianach statusu w utworzonych naprawach. Wymaga adresu e-mail.",
+   "fieldname": "powiadom_email",
+   "fieldtype": "Check",
+   "label": "Powiadamiaj e-mailem"
   },
   {
    "fieldname": "sec_akceptacja",

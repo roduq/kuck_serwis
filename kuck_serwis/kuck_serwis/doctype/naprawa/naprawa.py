@@ -1,17 +1,57 @@
 # Copyright (c) 2026, Kuck and contributors
 # For license information, please see license.txt
 
+from collections import Counter
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import today
+from frappe.utils import flt, today
+
+# Typy napraw, które bywają bezpłatne — przy wydaniu nie wymuszamy na nich kwoty > 0.
+RODZAJE_BEZPLATNE = ("Gwarancja", "Reklamacja")
 
 
 class Naprawa(Document):
 	def validate(self):
+		self.ustaw_kategorie_glowna()
 		self.set_akceptacja_date()
 		self.guard_w_naprawie()
+		self.uzupelnij_kwote_odbioru()
 		self.set_data_wydania()
+
+	def ustaw_kategorie_glowna(self):
+		"""Główna kategoria naprawy = dominująca kategoria wśród wybranych usterek.
+
+		Daje rozłączny podział sprzedaży po kategoriach w raporcie wydań (jedna naprawa = jedna
+		kategoria, więc kwota nie dubluje się między kategoriami). Uzupełniamy tylko gdy pole jest
+		puste — świadomej korekty recepcji nie nadpisujemy.
+		"""
+		if self.kategoria_glowna:
+			return
+		kategorie = [
+			frappe.db.get_value("Usterka", u.usterka, "kategoria")
+			for u in (self.usterki or [])
+			if u.usterka
+		]
+		kategorie = [k for k in kategorie if k]
+		if kategorie:
+			self.kategoria_glowna = Counter(kategorie).most_common(1)[0][0]
+
+	def uzupelnij_kwote_odbioru(self):
+		"""Przy wydaniu kwota odbioru jest obowiązkowa — chroni rzetelność obrotu w raportach.
+
+		Jeśli pole jest puste, podpowiadamy orientacyjną wycenę (recepcja może poprawić jednym
+		ruchem). Naprawy gwarancyjne/reklamacyjne bywają bezpłatne, a pole Currency we Frappe i
+		tak nie odróżnia „0 wpisane" od „puste" — dlatego blokujemy brak kwoty tylko dla typów
+		płatnych, a darmowe wydania (0 zł) przepuszczamy.
+		"""
+		if self.status != "Wydano":
+			return
+		if not flt(self.kwota_odbioru) and self.orientacyjna_wycena:
+			self.kwota_odbioru = self.orientacyjna_wycena
+		if not flt(self.kwota_odbioru) and self.rodzaj_naprawy not in RODZAJE_BEZPLATNE:
+			frappe.throw(_("Podaj kwotę odbioru przed wydaniem zegarka."))
 
 	def on_update(self):
 		self.zapisz_kontakt_u_klienta()

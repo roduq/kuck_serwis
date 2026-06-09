@@ -14,11 +14,21 @@ frappe.pages["karta-klienta"].on_page_load = function (wrapper) {
 };
 
 frappe.pages["karta-klienta"].on_page_show = function (wrapper) {
-	// Wejście z innego miejsca (np. z formularza klienta/naprawy) przez frappe.route_options.
-	const klient = frappe.route_options && frappe.route_options.klient;
-	if (klient) {
+	const kk = wrapper.karta_klienta;
+	// Klient może przyjść z innego ekranu (frappe.route_options, np. z formularza naprawy)
+	// albo z adresu URL (?klient=…) — dzięki temu wybór przeżywa odświeżenie strony (F5)
+	// i można podlinkować konkretnego klienta.
+	const klient = (frappe.route_options && frappe.route_options.klient) || frappe.urllib.get_arg("klient");
+	if (frappe.route_options) {
 		frappe.route_options = null;
-		wrapper.karta_klienta.ustaw_klienta(klient);
+	}
+	if (klient && klient !== kk.klient_field.get_value()) {
+		// set_value wyzwoli change → wczyta dane
+		kk.ustaw_klienta(klient);
+	} else if (kk.klient) {
+		// Ten sam klient (lub powrót na stronę): i tak odświeżamy dane przy każdym wejściu,
+		// bo status/kwoty naprawy mogły się zmienić w międzyczasie.
+		kk.wczytaj();
 	}
 };
 
@@ -66,10 +76,23 @@ class KartaKlienta {
 				const wartosc = this.klient_field.get_value();
 				if (wartosc !== this.klient) {
 					this.klient = wartosc;
+					this.zapisz_klienta_w_url(wartosc);
 					this.wczytaj();
 				}
 			},
 		});
+	}
+
+	zapisz_klienta_w_url(klient) {
+		// Trzymamy wybór w ?klient=… bez przeładowania trasy (replaceState), żeby przetrwał
+		// odświeżenie strony i dało się skopiować link do konkretnego klienta.
+		const url = new URL(window.location.href);
+		if (klient) {
+			url.searchParams.set("klient", klient);
+		} else {
+			url.searchParams.delete("klient");
+		}
+		window.history.replaceState(null, "", url);
 	}
 
 	ustaw_klienta(klient) {

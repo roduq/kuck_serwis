@@ -33,8 +33,10 @@ def _ensure_setup():
 	install.grant_external_access()
 	if not frappe.db.exists("Workflow", "Serwis Naprawa"):
 		install.create_workflow()
-	if not frappe.db.exists("Notification", "Naprawa - gotowa do odbioru (E-mail)"):
-		install.create_notifications()
+	# Powiadomienia odtwarzamy zawsze — to konfiguracja przebudowywana przy każdej migracji
+	# (after_migrate -> setup_all), więc test ma widzieć aktualne warunki, a nie te zostawione
+	# w bazie testowej z poprzedniej wersji kodu.
+	install.create_notifications()
 
 
 def _make_klient(**kwargs):
@@ -160,14 +162,44 @@ class TestNaprawaIntegracja(IntegrationTestCase):
 		self.assertEqual(doc.status, "W naprawie")
 
 	def test_workflow_pelna_sciezka_do_wydania(self):
-		# nie_powiadamiaj=1 -> nie wyzwalamy realnych powiadomień e-mail/SMS w teście
-		doc = _make_naprawa(klient_zaakceptowal=1, nie_powiadamiaj_klienta=1, kwota_odbioru=250)
+		# Powiadomienia domyślnie wyłączone (powiadom_sms/email = 0) -> w teście nie wyzwalamy
+		# realnych SMS/e-mail. kwota_odbioru wymagana przy wydaniu naprawy płatnej.
+		doc = _make_naprawa(klient_zaakceptowal=1, kwota_odbioru=250)
 		doc.insert(ignore_permissions=True)
 		apply_workflow(doc, "Przyjmij do naprawy")
 		apply_workflow(doc, "Zakończ naprawę")
 		apply_workflow(doc, "Wydaj zegarek")
 		self.assertEqual(doc.status, "Wydano")
 		self.assertEqual(str(doc.data_wydania), today())
+
+	def test_wydanie_wymaga_kwoty_dla_naprawy_platnej(self):
+		"""Naprawa płatna nie może zostać wydana bez kwoty — chroni rzetelność obrotu."""
+		doc = _make_naprawa(klient_zaakceptowal=1, rodzaj_naprawy="Naprawa krótka")
+		doc.insert(ignore_permissions=True)
+		apply_workflow(doc, "Przyjmij do naprawy")
+		apply_workflow(doc, "Zakończ naprawę")
+		with self.assertRaises(frappe.ValidationError):
+			apply_workflow(doc, "Wydaj zegarek")
+		self.assertEqual(frappe.db.get_value("Naprawa", doc.name, "status"), "Gotowe do odbioru")
+
+	def test_wydanie_podpowiada_kwote_z_wyceny(self):
+		"""Pusta kwota odbioru przy wydaniu uzupełnia się orientacyjną wyceną."""
+		doc = _make_naprawa(klient_zaakceptowal=1, orientacyjna_wycena=180)
+		doc.insert(ignore_permissions=True)
+		apply_workflow(doc, "Przyjmij do naprawy")
+		apply_workflow(doc, "Zakończ naprawę")
+		apply_workflow(doc, "Wydaj zegarek")
+		self.assertEqual(doc.status, "Wydano")
+		self.assertEqual(doc.kwota_odbioru, 180)
+
+	def test_wydanie_gwarancji_bez_kwoty_dozwolone(self):
+		"""Gwarancja bywa bezpłatna — 0 zł nie blokuje wydania."""
+		doc = _make_naprawa(klient_zaakceptowal=1, rodzaj_naprawy="Gwarancja")
+		doc.insert(ignore_permissions=True)
+		apply_workflow(doc, "Przyjmij do naprawy")
+		apply_workflow(doc, "Zakończ naprawę")
+		apply_workflow(doc, "Wydaj zegarek")
+		self.assertEqual(doc.status, "Wydano")
 
 
 class TestKartaKlienta(IntegrationTestCase):
@@ -257,19 +289,20 @@ class TestKuckSerwisSetup(IntegrationTestCase):
 		self.assertIn(("Przyjęto", "W naprawie"), przejscia)
 
 	def test_powiadomienia_warunkowane_zgoda_klienta(self):
-		for name in (
-			"Naprawa - gotowa do odbioru (E-mail)",
-			"Naprawa - gotowa do odbioru (SMS)",
-			"Naprawa - wycena do akceptacji (E-mail)",
-			"Naprawa - wycena do akceptacji (SMS)",
+		# Każdy kanał ma własny przełącznik zgody (logika pozytywna, domyślnie wyłączona).
+		for name, pole_zgody in (
+			("Naprawa - gotowa do odbioru (E-mail)", "powiadom_email"),
+			("Naprawa - gotowa do odbioru (SMS)", "powiadom_sms"),
+			("Naprawa - wycena do akceptacji (E-mail)", "powiadom_email"),
+			("Naprawa - wycena do akceptacji (SMS)", "powiadom_sms"),
 		):
 			self.assertTrue(frappe.db.exists("Notification", name), f"brak powiadomienia: {name}")
 			notif = frappe.get_doc("Notification", name)
 			self.assertTrue(notif.enabled)
 			self.assertEqual(notif.event, "Value Change")
 			self.assertEqual(notif.value_changed, "status")
-			# powiadomienie respektuje wyłącznik recepcji
-			self.assertIn("nie_powiadamiaj_klienta", notif.condition)
+			# powiadomienie respektuje przełącznik właściwego kanału
+			self.assertIn(pole_zgody, notif.condition)
 
 
 class TestSeedSlownikow(IntegrationTestCase):

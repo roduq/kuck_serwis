@@ -17,18 +17,21 @@ def execute(filters=None):
 	dni = filters.get("dni_tygodnia") or []
 	grupowanie = filters.get("grupowanie") or "Miesiąc"
 
+	brak = _("(brak kategorii)")
 	agg = defaultdict(lambda: {"liczba": 0, "suma": 0.0})
 	for r in rows:
 		d = getdate(r.data_wydania)
 		if dni and WEEKDAYS[d.weekday()] not in dni:
 			continue
-		key = _period_key(d, grupowanie)
+		# Rozbicie po okresie ORAZ głównej kategorii naprawy. Dzięki temu, że naprawa ma jedną
+		# kategorię główną, kwoty nie dublują się — suma kategorii w okresie = obrót okresu.
+		key = (_period_key(d, grupowanie), r.kategoria_glowna or brak)
 		agg[key]["liczba"] += 1
 		agg[key]["suma"] += flt(r.kwota_odbioru)
 
 	data = [
-		{"okres": key, "liczba": agg[key]["liczba"], "suma": agg[key]["suma"]}
-		for key in sorted(agg)
+		{"okres": okres, "kategoria": kategoria, "liczba": v["liczba"], "suma": v["suma"]}
+		for (okres, kategoria), v in sorted(agg.items())
 	]
 	return _columns(), data
 
@@ -48,10 +51,13 @@ def _get_rows(filters):
 	if filters.get("marka"):
 		conditions.append("marka = %(marka)s")
 		values["marka"] = filters.marka
+	if filters.get("kategoria"):
+		conditions.append("kategoria_glowna = %(kategoria)s")
+		values["kategoria"] = filters.kategoria
 
 	where = " and ".join(conditions)
 	return frappe.db.sql(
-		f"select data_wydania, kwota_odbioru from `tabNaprawa` where {where}",  # nosec
+		f"select data_wydania, kwota_odbioru, kategoria_glowna from `tabNaprawa` where {where}",  # nosec
 		values,
 		as_dict=True,
 	)
@@ -72,7 +78,13 @@ def _period_key(d, grupowanie):
 
 def _columns():
 	return [
-		{"label": _("Okres"), "fieldname": "okres", "fieldtype": "Data", "width": 160},
+		{"label": _("Okres"), "fieldname": "okres", "fieldtype": "Data", "width": 140},
+		{
+			"label": _("Kategoria napraw"),
+			"fieldname": "kategoria",
+			"fieldtype": "Data",
+			"width": 200,
+		},
 		{"label": _("Liczba napraw"), "fieldname": "liczba", "fieldtype": "Int", "width": 130},
 		{
 			"label": _("Suma wydań (zł)"),

@@ -158,8 +158,24 @@ def set_language_pl():
 
 	Frappe ma komplet tłumaczeń `pl`; ustawienie domyślnego języka systemu sprawia,
 	że standardowe komunikaty (przyciski, walidacje, listy) ładują się po polsku.
+
+	UWAGA: język użytkownika (`User.language`) nadpisuje ustawienie systemowe — to przez
+	to Desk bywa „w połowie po angielsku" (konto z pustym/angielskim językiem). Dlatego
+	zerujemy do `pl` także istniejące konta, ale TYLKO te bez świadomie wybranego innego
+	języka (puste lub angielskie warianty) — nie ruszamy kogoś, kto ustawił np. `de`.
 	"""
 	frappe.db.set_single_value("System Settings", "language", "pl")
+	users = frappe.get_all(
+		"User",
+		filters={"user_type": "System User"},
+		or_filters=[
+			["language", "in", ["", "en", "en-US", "en-GB"]],
+			["language", "is", "not set"],
+		],
+		pluck="name",
+	)
+	for user in users:
+		frappe.db.set_value("User", user, "language", "pl", update_modified=False)
 
 
 def _ensure_workflow_masters():
@@ -264,7 +280,10 @@ NOTIFICATIONS = [
 
 def create_notifications():
 	for name, subject, channel, status_value, receiver_field, message in NOTIFICATIONS:
-		condition = f'doc.status == "{status_value}" and not doc.nie_powiadamiaj_klienta'
+		# Osobny przełącznik na kanał (decyzja klienta: domyślnie wyłączone) — SMS leci tylko gdy
+		# zaznaczono „Powiadamiaj SMS-em", e-mail tylko gdy „Powiadamiaj e-mailem".
+		zgoda = "doc.powiadom_email" if channel == "Email" else "doc.powiadom_sms"
+		condition = f'doc.status == "{status_value}" and {zgoda}'
 		if frappe.db.exists("Notification", name):
 			doc = frappe.get_doc("Notification", name)
 		else:

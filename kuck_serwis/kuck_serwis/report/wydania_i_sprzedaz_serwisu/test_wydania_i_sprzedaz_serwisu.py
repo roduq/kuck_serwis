@@ -108,3 +108,75 @@ class TestRaportWydania(IntegrationTestCase):
 		# raport po naszej marce widzi dokładnie 4 wydania (niezależnie od reszty bazy)
 		wynik = self._run(grupowanie="Rok")
 		self.assertEqual(sum(liczba for liczba, _suma in wynik.values()), 4)
+
+
+def _ensure_kategoria(nazwa):
+	if not frappe.db.exists("Kategoria Napraw", nazwa):
+		frappe.get_doc({"doctype": "Kategoria Napraw", "nazwa": nazwa}).insert(ignore_permissions=True)
+	return nazwa
+
+
+class TestRaportRozbicieKategorii(IntegrationTestCase):
+	"""Rozbicie sprzedaży po głównej kategorii naprawy + filtr kategorii.
+
+	Kluczowe: kwoty nie dublują się między kategoriami (jedna naprawa = jedna kategoria główna),
+	więc suma kategorii = obrót okresu.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.marka = "ZZ Test Kat " + frappe.generate_hash(length=4)
+		frappe.get_doc({"doctype": "Marka Zegarka", "nazwa": cls.marka}).insert(ignore_permissions=True)
+		cls.kat_a = _ensure_kategoria("ZZ Kat A " + frappe.generate_hash(length=4))
+		cls.kat_b = _ensure_kategoria("ZZ Kat B " + frappe.generate_hash(length=4))
+		klient = frappe.get_doc(
+			{
+				"doctype": "Customer",
+				"customer_name": "Raport Kat " + frappe.generate_hash(length=6),
+				"customer_type": "Individual",
+				"mobile_no": "+48111000222",
+			}
+		).insert(ignore_permissions=True)
+		# kat A: 100 + 150, kat B: 200 — wszystko w kwietniu 2026
+		for kwota, kategoria in [(100, cls.kat_a), (150, cls.kat_a), (200, cls.kat_b)]:
+			doc = frappe.get_doc(
+				{
+					"doctype": "Naprawa",
+					"klient": klient.name,
+					"status": "Przyjęto",
+					"rodzaj_naprawy": "Naprawa krótka",
+					"marka": cls.marka,
+					"model_zegarka": "T",
+					"sposob_dostarczenia": "Stacjonarnie",
+					"sposob_odbioru": "Stacjonarnie",
+					"kategoria_glowna": kategoria,
+				}
+			).insert(ignore_permissions=True)
+			frappe.db.set_value(
+				"Naprawa",
+				doc.name,
+				{"status": "Wydano", "data_wydania": "2026-04-10", "kwota_odbioru": kwota},
+				update_modified=False,
+			)
+
+	def _run(self, **extra):
+		filters = {
+			"od_daty": "2026-01-01",
+			"do_daty": "2026-12-31",
+			"grupowanie": "Rok",
+			"marka": self.marka,
+		}
+		filters.update(extra)
+		_columns, data = execute(filters)
+		return {r["kategoria"]: (r["liczba"], r["suma"]) for r in data}
+
+	def test_rozbicie_po_kategorii(self):
+		wynik = self._run()
+		self.assertEqual(wynik.get(self.kat_a), (2, 250))
+		self.assertEqual(wynik.get(self.kat_b), (1, 200))
+
+	def test_filtr_kategorii(self):
+		wynik = self._run(kategoria=self.kat_a)
+		self.assertEqual(wynik.get(self.kat_a), (2, 250))
+		self.assertNotIn(self.kat_b, wynik)
