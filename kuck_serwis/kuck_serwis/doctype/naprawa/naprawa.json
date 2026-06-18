@@ -38,6 +38,7 @@
   "orientacyjny_termin_naprawy",
   "col_wycena",
   "klient_zaakceptowal",
+  "klient_nie_otrzymal_pokwitowania",
   "data_akceptacji",
   "akceptacja_uwagi",
   "sec_wydanie",
@@ -100,12 +101,15 @@
    "read_only": 1
   },
   {
+   "default": "Naprawa krótka",
    "fieldname": "rodzaj_naprawy",
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Rodzaj naprawy",
-   "options": "Gwarancja\nNaprawa długa\nNaprawa krótka\nReklamacja",
-   "reqd": 1
+   "options": "Naprawa krótka\nNaprawa długa\nGwarancja\nReklamacja",
+   "print_hide": 1,
+   "reqd": 1,
+   "sort_options": 0
   },
   {
    "fieldname": "sec_zegarek",
@@ -243,6 +247,12 @@
    "fieldname": "klient_zaakceptowal",
    "fieldtype": "Check",
    "label": "Klient zaakceptował naprawę"
+  },
+  {
+   "default": "0",
+   "fieldname": "klient_nie_otrzymal_pokwitowania",
+   "fieldtype": "Check",
+   "label": "Klient nie otrzymał pokwitowania"
   },
   {
    "depends_on": "klient_zaakceptowal",

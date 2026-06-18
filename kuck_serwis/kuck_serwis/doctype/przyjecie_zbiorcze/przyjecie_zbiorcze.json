@@ -92,11 +92,13 @@
    "description": "Te pola zostaną przepisane do każdej naprawy utworzonej z tego przyjęcia."
   },
   {
+   "default": "Naprawa krótka",
    "fieldname": "rodzaj_naprawy",
    "fieldtype": "Select",
    "label": "Rodzaj naprawy",
-   "options": "Gwarancja\nNaprawa długa\nNaprawa krótka\nReklamacja",
-   "reqd": 1
+   "options": "Naprawa krótka\nNaprawa długa\nGwarancja\nReklamacja",
+   "reqd": 1,
+   "sort_options": 0
   },
   {
    "default": "Stacjonarnie",

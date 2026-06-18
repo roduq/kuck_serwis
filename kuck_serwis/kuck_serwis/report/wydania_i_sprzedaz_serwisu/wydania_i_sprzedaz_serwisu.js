@@ -28,7 +28,8 @@ frappe.query_reports["Wydania i sprzedaz serwisu"] = {
 			fieldname: "rodzaj_naprawy",
 			label: __("Rodzaj naprawy"),
 			fieldtype: "Select",
-			options: ["", "Gwarancja", "Naprawa długa", "Naprawa krótka", "Reklamacja"].join("\n"),
+			options: ["Naprawa krótka", "Naprawa długa", "Gwarancja", "Reklamacja"].join("\n"),
+			sort_options: 0,
 		},
 		{
 			fieldname: "marka",
