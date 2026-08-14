@@ -12,6 +12,7 @@
   "klient_telefon",
   "klient_email",
   "col_zgloszenie",
+  "public_id",
   "status",
   "rodzaj_naprawy",
   "sec_zegarek",
@@ -89,6 +90,15 @@
   {
    "fieldname": "col_zgloszenie",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "public_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Publiczny identyfikator",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
   },
   {
    "default": "Przyjęto",

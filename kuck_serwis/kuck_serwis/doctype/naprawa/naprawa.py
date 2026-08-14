@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Kuck and contributors
 # For license information, please see license.txt
 
+import re
+import secrets
 from collections import Counter
 
 import frappe
@@ -10,15 +12,31 @@ from frappe.utils import flt, today
 
 # Typy napraw, które bywają bezpłatne — przy wydaniu nie wymuszamy na nich kwoty > 0.
 RODZAJE_BEZPLATNE = ("Gwarancja", "Reklamacja")
+PUBLIC_ID_PATTERN = re.compile(r"^rpr_[A-Za-z0-9_-]{32}$")
+PUBLIC_ID_GENERATION_ATTEMPTS = 5
 
 
 class Naprawa(Document):
+	def before_insert(self):
+		if self.public_id:
+			frappe.throw(_("Publiczny identyfikator jest zarządzany przez system."))
+		self.public_id = generate_unique_public_id()
+
 	def validate(self):
+		self.validate_public_id_immutable()
 		self.ustaw_kategorie_glowna()
 		self.set_akceptacja_date()
 		self.guard_w_naprawie()
 		self.uzupelnij_kwote_odbioru()
 		self.set_data_wydania()
+
+	def validate_public_id_immutable(self):
+		"""Nie pozwala formularzom, importom ani kodowi API zmieniać publicznego ID."""
+		if self.is_new():
+			return
+		stored_public_id = frappe.db.get_value("Naprawa", self.name, "public_id")
+		if stored_public_id != self.public_id:
+			frappe.throw(_("Publiczny identyfikator jest niezmienny."))
 
 	def ustaw_kategorie_glowna(self):
 		"""Główna kategoria naprawy = dominująca kategoria wśród wybranych usterek.
@@ -30,9 +48,7 @@ class Naprawa(Document):
 		if self.kategoria_glowna:
 			return
 		kategorie = [
-			frappe.db.get_value("Usterka", u.usterka, "kategoria")
-			for u in (self.usterki or [])
-			if u.usterka
+			frappe.db.get_value("Usterka", u.usterka, "kategoria") for u in (self.usterki or []) if u.usterka
 		]
 		kategorie = [k for k in kategorie if k]
 		if kategorie:
@@ -109,7 +125,9 @@ class Naprawa(Document):
 		"""Naprawa nie rusza bez zgody klienta — niezależnie od tego, czy była osobna wycena."""
 		if self.status == "W naprawie" and not self.klient_zaakceptowal:
 			frappe.throw(
-				_("Nie można rozpocząć naprawy bez akceptacji klienta. Zaznacz „Klient zaakceptował naprawę”.")
+				_(
+					"Nie można rozpocząć naprawy bez akceptacji klienta. Zaznacz „Klient zaakceptował naprawę”."
+				)
 			)
 
 	def set_data_wydania(self):
@@ -133,3 +151,14 @@ def _ustaw_glowny_email(contact, email):
 		contact.append("email_ids", {"email_id": email})
 	for e in contact.email_ids:
 		e.is_primary = 1 if e.email_id == email else 0
+
+
+def generate_unique_public_id():
+	"""Generuje nieprzewidywalny identyfikator; constraint bazy chroni przed wyścigiem."""
+	for _attempt in range(PUBLIC_ID_GENERATION_ATTEMPTS):
+		candidate = f"rpr_{secrets.token_urlsafe(24)}"
+		if PUBLIC_ID_PATTERN.fullmatch(candidate) and not frappe.db.exists(
+			"Naprawa", {"public_id": candidate}
+		):
+			return candidate
+	frappe.throw(_("Nie udało się nadać publicznego identyfikatora naprawy."))
