@@ -98,8 +98,10 @@ importable_doctypes = ["Number Card", "Dashboard Chart"]
 # before_install = "kuck_serwis.install.before_install"
 after_install = "kuck_serwis.install.after_install"
 
-# Konfiguracja modułu jest idempotentna — odtwarzamy ją po każdej migracji, żeby uprawnienia
-# roli Serwis (także do doctypów ERPNext) przetrwały aktualizacje i resynchronizację.
+# Konfiguracja domenowa jest idempotentna — odtwarzamy ją po każdej migracji, żeby uprawnienia
+# roli Serwis (także do doctypów ERPNext) przetrwały aktualizacje i resynchronizację. setup_all
+# celowo nie zmienia języka, formatów liczb ani preferencji User; polski default należy tylko
+# do jednorazowego provisioningu after_install.
 after_migrate = "kuck_serwis.install.setup_all"
 
 # Uninstallation
@@ -275,4 +277,3 @@ override_doctype_dashboards = {
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

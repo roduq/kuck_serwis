@@ -1,9 +1,10 @@
 # Copyright (c) 2026, Kuck and contributors
 # For license information, please see license.txt
-"""Idempotentna konfiguracja modułu serwisu — uruchamiana po instalacji aplikacji.
+"""Konfiguracja modułu serwisu uruchamiana po instalacji i migracji aplikacji.
 
-Tworzy rolę Serwis, ustawia walutę PLN oraz buduje Workflow naprawy. Funkcje są
-idempotentne, więc można je bezpiecznie wywołać ponownie (po migracji/aktualizacji).
+Instalacja ustawia polski język jako domyślny dla nowego site. Cykliczna migracja
+odtwarza wyłącznie idempotentną konfigurację domenową i nie zmienia locale site
+ani indywidualnych preferencji użytkowników.
 """
 
 import json
@@ -59,19 +60,19 @@ EXTERNAL_PERMISSIONS = {
 
 
 def after_install():
+	provision_polish_site()
 	setup_all()
 	seed_slowniki()
 
 
 def setup_all():
+	"""Odtwórz idempotentną konfigurację domenową bez zmiany locale site."""
 	create_role()
 	grant_external_access()
 	set_currency_pln()
-	set_language_pl()
 	create_workflow()
 	create_notifications()
 	sync_workspaces()
-	frappe.db.commit()
 
 
 # Pliki obszaru roboczego i bocznego menu (względem katalogu modułu kuck_serwis).
@@ -119,7 +120,6 @@ def seed_slowniki():
 	from kuck_serwis import seed
 
 	seed.seed_all()
-	frappe.db.commit()
 
 
 def create_role():
@@ -153,44 +153,29 @@ def set_currency_pln():
 		frappe.db.set_single_value("System Settings", "currency", "PLN")
 
 
-def set_language_pl():
-	"""Serwis nie zna angielskiego — cały Desk ma być po polsku.
+def provision_polish_site():
+	"""Ustaw polski język domyślny wyłącznie podczas provisioningu nowego site.
 
-	Frappe ma komplet tłumaczeń `pl`; ustawienie domyślnego języka systemu sprawia,
-	że standardowe komunikaty (przyciski, walidacje, listy) ładują się po polsku.
-
-	UWAGA: język użytkownika (`User.language`) nadpisuje ustawienie systemowe — to przez
-	to Desk bywa „w połowie po angielsku" (konto z pustym/angielskim językiem). Dlatego
-	zerujemy do `pl` także istniejące konta, ale TYLKO te bez świadomie wybranego innego
-	języka (puste lub angielskie warianty) — nie ruszamy kogoś, kto ustawił np. `de`.
+	Hook ``after_install`` jest jedynym wywołującym. Nie zapisujemy ``User.language``:
+	użytkownicy bez preferencji dziedziczą język site, a każdy jawny wybór konta
+	(``en``, ``pl`` lub inny) pozostaje nienaruszony.
 	"""
 	frappe.db.set_single_value("System Settings", "language", "pl")
-	users = frappe.get_all(
-		"User",
-		filters={"user_type": "System User"},
-		or_filters=[
-			["language", "in", ["", "en", "en-US", "en-GB"]],
-			["language", "is", "not set"],
-		],
-		pluck="name",
-	)
-	for user in users:
-		frappe.db.set_value("User", user, "language", "pl", update_modified=False)
 
 
 def _ensure_workflow_masters():
 	"""Workflow State i Workflow Action Master to słowniki — muszą istnieć zanim podepniemy je w Workflow."""
 	for state in WORKFLOW_STATES:
 		if not frappe.db.exists("Workflow State", state):
-			frappe.get_doc(
-				{"doctype": "Workflow State", "workflow_state_name": state}
-			).insert(ignore_if_duplicate=True)
+			frappe.get_doc({"doctype": "Workflow State", "workflow_state_name": state}).insert(
+				ignore_if_duplicate=True
+			)
 	actions = {action for _from, action, _to in WORKFLOW_TRANSITIONS}
 	for action in actions:
 		if not frappe.db.exists("Workflow Action Master", action):
-			frappe.get_doc(
-				{"doctype": "Workflow Action Master", "workflow_action_name": action}
-			).insert(ignore_if_duplicate=True)
+			frappe.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(
+				ignore_if_duplicate=True
+			)
 
 
 def create_workflow():
