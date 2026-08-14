@@ -13,10 +13,12 @@ import hashlib
 import hmac
 import json
 import re
+import secrets
 import time
+from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Final
+from typing import Final, Protocol
 
 import frappe
 
@@ -32,7 +34,10 @@ CURSOR_MAX_CLOCK_SKEW_SECONDS: Final = 30
 _CURSOR_MAX_LENGTH: Final = 1024
 _CURSOR_SIGNATURE_BYTES: Final = 32
 _CURSOR_KEY_CONTEXT: Final = b"kuck-serwis/public-contract/v1/cursor"
+_AUDIT_KEY_CONTEXT: Final = b"kuck-serwis/public-contract/v1/audit"
 _AUDIT_AND_MONITORING_READY: Final = False
+_AUDIT_EVENT_NAME: Final = "kuck_serwis.public_contract.audit.v1"
+_AUDIT_LOGGER_NAME: Final = "kuck_serwis.public_contract.audit"
 _CURSOR_FIELDS: Final = frozenset(
 	{"cursor_version", "schema_revision", "issued_at", "last_creation", "last_public_id", "scope"}
 )
@@ -68,12 +73,26 @@ class PublicContractError(RuntimeError):
 		super().__init__(public_message)
 
 
+class AuditEventSink(Protocol):
+	"""Mandatory sink must acknowledge durable acceptance with literal ``True``."""
+
+	def emit(self, event: dict[str, object]) -> bool: ...
+
+
 def get_capabilities() -> dict[str, object]:
 	features = [ACCOUNT_READ] if _account_read_enabled() else []
 	return {"contract": CONTRACT_NAME, "schema_revision": SCHEMA_REVISION, "features": features}
 
 
 def list_repairs_for_current_user(cursor=None, page_size=20) -> dict[str, object]:
+	return _run_audited(
+		operation="list",
+		repair_handle=None,
+		call=lambda: _list_repairs_for_current_user(cursor, page_size),
+	)
+
+
+def _list_repairs_for_current_user(cursor=None, page_size=20) -> dict[str, object]:
 	_require_account_read()
 	customers = _authorized_customers_for_current_user()
 	_validate_page_size(page_size)
@@ -91,6 +110,14 @@ def list_repairs_for_current_user(cursor=None, page_size=20) -> dict[str, object
 
 
 def get_repair_for_current_user(repair_id) -> dict[str, object]:
+	return _run_audited(
+		operation="get",
+		repair_handle=repair_id,
+		call=lambda: _get_repair_for_current_user(repair_id),
+	)
+
+
+def _get_repair_for_current_user(repair_id) -> dict[str, object]:
 	_require_account_read()
 	customers = _authorized_customers_for_current_user()
 	lookup_id = (
@@ -120,6 +147,8 @@ def _account_read_enabled() -> bool:
 
 def _is_ready() -> bool:
 	if not _AUDIT_AND_MONITORING_READY:
+		return False
+	if _get_audit_sink() is None or _audit_hmac_key() is None:
 		return False
 	if _cursor_signing_key() is None:
 		return False
@@ -264,6 +293,13 @@ def _validate_cursor_payload(payload: object, customers: tuple[str, ...], key: b
 
 def _cursor_signing_key() -> bytes | None:
 	"""Derive a purpose-specific key from the in-memory, per-site Fernet key."""
+	site_key = _site_key()
+	if site_key is None:
+		return None
+	return hmac.new(site_key, _CURSOR_KEY_CONTEXT, hashlib.sha256).digest()
+
+
+def _site_key() -> bytes | None:
 	conf = getattr(frappe.local, "conf", None)
 	encoded_key = conf.get("encryption_key") if conf else None
 	if type(encoded_key) is not str:
@@ -274,7 +310,14 @@ def _cursor_signing_key() -> bytes | None:
 		return None
 	if len(site_key) != 32:
 		return None
-	return hmac.new(site_key, _CURSOR_KEY_CONTEXT, hashlib.sha256).digest()
+	return site_key
+
+
+def _audit_hmac_key() -> bytes | None:
+	site_key = _site_key()
+	if site_key is None:
+		return None
+	return hmac.new(site_key, _AUDIT_KEY_CONTEXT, hashlib.sha256).digest()
 
 
 def _require_cursor_signing_key() -> bytes:
@@ -312,6 +355,136 @@ def _now_timestamp() -> int:
 
 def _raise_invalid_cursor() -> None:
 	raise PublicContractError("INVALID_CURSOR", "The pagination cursor is invalid.")
+
+
+def _run_audited(operation: str, repair_handle: object, call: Callable[[], object]):
+	started_at = time.perf_counter_ns()
+	correlation_id = f"corr_{secrets.token_urlsafe(18)}"
+	sink = _get_audit_sink()
+	audit_key = _audit_hmac_key()
+	if sink is None or audit_key is None:
+		_log_audit_sink_failure(operation, correlation_id)
+		raise PublicContractError("DEPENDENCY_UNAVAILABLE", "Repair service is temporarily unavailable.")
+
+	result = None
+	pending_error = None
+	try:
+		result = call()
+	except PublicContractError as error:
+		pending_error = error
+		result_code = error.code if error.code in _public_result_codes() else "INTERNAL_ERROR"
+	except Exception:
+		pending_error = PublicContractError(
+			"DEPENDENCY_UNAVAILABLE", "Repair service is temporarily unavailable."
+		)
+		result_code = "INTERNAL_ERROR"
+	else:
+		result_code = "OK"
+
+	event = {
+		"event": _AUDIT_EVENT_NAME,
+		"contract": CONTRACT_NAME,
+		"schema_revision": SCHEMA_REVISION,
+		"correlation_id": correlation_id,
+		"operation": operation,
+		"outcome": _audit_outcome(result_code),
+		"actor_class": _actor_class(),
+		"actor_hash": _audit_hash(audit_key, "actor", _session_user()),
+		"repair_handle_hash": (
+			_audit_hash(audit_key, "repair", repair_handle if type(repair_handle) is str else "")
+			if operation == "get"
+			else None
+		),
+		"result_code": result_code,
+		"count": _result_count(operation, result) if result_code == "OK" else 0,
+		"latency_ms": max(0, (time.perf_counter_ns() - started_at) // 1_000_000),
+	}
+	_emit_audit_event(sink, event)
+	if pending_error is not None:
+		raise pending_error
+	return result
+
+
+def _get_audit_sink() -> AuditEventSink | None:
+	"""Durable sink integration is pending retention, alert thresholds and rollout approval."""
+	return None
+
+
+def _emit_audit_event(sink: AuditEventSink, event: dict[str, object]) -> None:
+	try:
+		acknowledged = sink.emit(event)
+	except Exception:
+		acknowledged = False
+	if acknowledged is not True:
+		_log_audit_sink_failure(str(event["operation"]), str(event["correlation_id"]))
+		raise PublicContractError("DEPENDENCY_UNAVAILABLE", "Repair service is temporarily unavailable.")
+
+
+def _log_audit_sink_failure(operation: str, correlation_id: str) -> None:
+	"""Best-effort diagnostic only; the rotating logger is not the mandatory audit sink."""
+	try:
+		frappe.logger(_AUDIT_LOGGER_NAME, with_more_info=False).error(
+			{
+				"event": "kuck_serwis.public_contract.audit_sink_unavailable.v1",
+				"contract": CONTRACT_NAME,
+				"schema_revision": SCHEMA_REVISION,
+				"correlation_id": correlation_id,
+				"operation": operation,
+				"result_code": "AUDIT_SINK_UNAVAILABLE",
+			}
+		)
+	except Exception:
+		pass
+
+
+def _session_user() -> str:
+	return getattr(getattr(frappe, "session", None), "user", "") or ""
+
+
+def _actor_class() -> str:
+	user = _session_user()
+	if not user or user == "Guest":
+		return "guest"
+	try:
+		user_state = frappe.db.get_value("User", user, ["enabled", "user_type"], as_dict=True)
+	except Exception:
+		return "unknown"
+	if not user_state:
+		return "unknown"
+	if not user_state.enabled:
+		return "disabled_user"
+	if user_state.user_type == "Website User":
+		return "website_user"
+	if user_state.user_type == "System User":
+		return "system_user"
+	return "unknown"
+
+
+def _audit_hash(key: bytes, domain: str, value: str) -> str:
+	message = f"{domain}\0{value}".encode()
+	return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def _audit_outcome(result_code: str) -> str:
+	if result_code == "OK":
+		return "success"
+	if result_code in {"AUTH_REQUIRED", "NOT_FOUND", "INVALID_CURSOR", "VALIDATION_FAILED"}:
+		return "deny"
+	return "error"
+
+
+def _public_result_codes() -> frozenset[str]:
+	return frozenset(
+		{"AUTH_REQUIRED", "NOT_FOUND", "INVALID_CURSOR", "VALIDATION_FAILED", "DEPENDENCY_UNAVAILABLE"}
+	)
+
+
+def _result_count(operation: str, result: object) -> int:
+	if operation == "get":
+		return 1
+	if operation == "list" and isinstance(result, dict) and isinstance(result.get("items"), list):
+		return len(result["items"])
+	return 0
 
 
 def _project_repair(row) -> dict[str, object]:

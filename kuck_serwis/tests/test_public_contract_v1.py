@@ -9,6 +9,17 @@ from kuck_serwis.patches import backfill_naprawa_public_id
 from kuck_serwis.public_contract import v1
 
 TEST_CURSOR_KEY = bytes([66]) * 32
+TEST_AUDIT_KEY = bytes([67]) * 32
+
+
+class _CapturingAuditSink:
+	def __init__(self, *, acknowledge=True):
+		self.acknowledge = acknowledge
+		self.events = []
+
+	def emit(self, event):
+		self.events.append(dict(event))
+		return self.acknowledge
 
 
 def _make_user(*, user_type="Website User", enabled=1):
@@ -61,8 +72,15 @@ class TestPublicContractV1(IntegrationTestCase):
 		self._flag_was_present = v1.ROLLOUT_FLAG in frappe.conf
 		self._previous_flag = frappe.conf.get(v1.ROLLOUT_FLAG)
 		frappe.conf.pop(v1.ROLLOUT_FLAG, None)
+		self.audit_sink = _CapturingAuditSink()
+		self._audit_sink_patch = patch.object(v1, "_get_audit_sink", return_value=self.audit_sink)
+		self._audit_key_patch = patch.object(v1, "_audit_hmac_key", return_value=TEST_AUDIT_KEY)
+		self._audit_sink_patch.start()
+		self._audit_key_patch.start()
 
 	def tearDown(self):
+		self._audit_key_patch.stop()
+		self._audit_sink_patch.stop()
 		frappe.set_user(self._previous_user)
 		if self._flag_was_present:
 			frappe.conf[v1.ROLLOUT_FLAG] = self._previous_flag
@@ -77,10 +95,8 @@ class TestPublicContractV1(IntegrationTestCase):
 		)
 		frappe.conf[v1.ROLLOUT_FLAG] = True
 		with patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY):
-			# Audit and monitoring are the remaining hard readiness gate.
+			# Retention, alert thresholds and durable sink rollout remain a hard gate.
 			self.assertEqual(v1.get_capabilities()["features"], [])
-		with patch.object(v1, "_is_ready", return_value=True):
-			self.assertEqual(v1.get_capabilities()["features"], ["account-read"])
 		frappe.conf[v1.ROLLOUT_FLAG] = False
 		with patch.object(v1, "_is_ready", return_value=True):
 			self.assertEqual(v1.get_capabilities()["features"], [])
@@ -228,14 +244,12 @@ class TestPublicContractV1(IntegrationTestCase):
 		)
 		for repair, creation in zip(repairs, creation_values, strict=True):
 			frappe.db.set_value("Naprawa", repair.name, "creation", creation, update_modified=False)
-		expected = [
-			repair.public_id
-			for repair, _creation in sorted(
-				zip(repairs, creation_values, strict=True),
-				key=lambda pair: (pair[1], pair[0].public_id),
-				reverse=True,
-			)
-		]
+		expected = frappe.get_all(
+			"Naprawa",
+			filters={"name": ["in", [repair.name for repair in repairs]]},
+			pluck="public_id",
+			order_by="creation desc, public_id desc",
+		)
 
 		frappe.set_user(user.name)
 		seen = []
@@ -309,6 +323,139 @@ class TestPublicContractV1(IntegrationTestCase):
 		frappe.set_user(user_a.name)
 		_make_customer(user_a)
 		assert_invalid(cursor, 20_000)
+
+	def test_audit_events_are_sanitized_and_cover_success_denials_and_dependency(self):
+		user = _make_user()
+		customer = _make_customer(user)
+		repair = _make_repair(
+			customer,
+			klient_email="audit-private@example.test",
+			klient_telefon="+48999888777",
+		)
+		missing_handle = "rpr_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+		raw_cursor = "raw-cursor-audit-private@example.test"
+		frappe.set_user(user.name)
+
+		with patch.object(v1, "_account_read_enabled", return_value=True):
+			v1.list_repairs_for_current_user(None, 20)
+			v1.get_repair_for_current_user(repair.public_id)
+			with self.assertRaises(v1.PublicContractError):
+				v1.get_repair_for_current_user(missing_handle)
+			with (
+				patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY),
+				self.assertRaises(v1.PublicContractError),
+			):
+				v1.list_repairs_for_current_user(raw_cursor, 20)
+
+		frappe.set_user("Guest")
+		with (
+			patch.object(v1, "_account_read_enabled", return_value=True),
+			self.assertRaises(v1.PublicContractError),
+		):
+			v1.list_repairs_for_current_user(None, 20)
+
+		frappe.set_user(user.name)
+		with self.assertRaises(v1.PublicContractError):
+			v1.list_repairs_for_current_user(None, 20)
+
+		events = self.audit_sink.events
+		self.assertEqual(
+			[
+				(event["operation"], event["result_code"], event["outcome"], event["count"])
+				for event in events
+			],
+			[
+				("list", "OK", "success", 1),
+				("get", "OK", "success", 1),
+				("get", "NOT_FOUND", "deny", 0),
+				("list", "INVALID_CURSOR", "deny", 0),
+				("list", "AUTH_REQUIRED", "deny", 0),
+				("list", "DEPENDENCY_UNAVAILABLE", "error", 0),
+			],
+		)
+		expected_fields = {
+			"event",
+			"contract",
+			"schema_revision",
+			"correlation_id",
+			"operation",
+			"outcome",
+			"actor_class",
+			"actor_hash",
+			"repair_handle_hash",
+			"result_code",
+			"count",
+			"latency_ms",
+		}
+		for event in events:
+			self.assertEqual(set(event), expected_fields)
+			self.assertEqual(event["event"], "kuck_serwis.public_contract.audit.v1")
+			self.assertEqual(event["contract"], "kuck-serwis/v1")
+			self.assertEqual(event["schema_revision"], 1)
+			self.assertRegex(event["correlation_id"], r"^corr_[A-Za-z0-9_-]{24}$")
+			self.assertRegex(event["actor_hash"], r"^[0-9a-f]{64}$")
+			self.assertIs(type(event["latency_ms"]), int)
+			self.assertGreaterEqual(event["latency_ms"], 0)
+		self.assertEqual(len({event["correlation_id"] for event in events}), len(events))
+		self.assertEqual(
+			[event["actor_class"] for event in events], ["website_user"] * 4 + ["guest", "website_user"]
+		)
+		self.assertIsNone(events[0]["repair_handle_hash"])
+		self.assertRegex(events[1]["repair_handle_hash"], r"^[0-9a-f]{64}$")
+		self.assertRegex(events[2]["repair_handle_hash"], r"^[0-9a-f]{64}$")
+
+		serialized_events = repr(events)
+		for forbidden in (
+			user.name,
+			customer.name,
+			repair.name,
+			repair.public_id,
+			missing_handle,
+			raw_cursor,
+			"audit-private@example.test",
+			"+48999888777",
+			"Model publiczny",
+			"SECRET-SERIAL",
+			"Guest",
+		):
+			self.assertNotIn(forbidden, serialized_events)
+
+	def test_unacknowledged_audit_sink_fails_closed_before_returning_data(self):
+		user = _make_user()
+		customer = _make_customer(user)
+		_make_repair(customer)
+		frappe.set_user(user.name)
+		rejecting_sink = _CapturingAuditSink(acknowledge=False)
+
+		with (
+			patch.object(v1, "_account_read_enabled", return_value=True),
+			patch.object(v1, "_get_audit_sink", return_value=rejecting_sink),
+			patch.object(v1, "_log_audit_sink_failure") as diagnostic,
+			self.assertRaises(v1.PublicContractError) as caught,
+		):
+			v1.list_repairs_for_current_user(None, 20)
+
+		self.assertEqual(caught.exception.code, "DEPENDENCY_UNAVAILABLE")
+		self.assertEqual(len(rejecting_sink.events), 1)
+		self.assertEqual(rejecting_sink.events[0]["result_code"], "OK")
+		diagnostic.assert_called_once()
+
+	def test_unexpected_dependency_error_is_audited_and_sanitized(self):
+		private_detail = "customer-private@example.test table tabNaprawa"
+
+		with (
+			patch.object(v1, "_list_repairs_for_current_user", side_effect=RuntimeError(private_detail)),
+			self.assertRaises(v1.PublicContractError) as caught,
+		):
+			v1.list_repairs_for_current_user(None, 20)
+
+		self.assertEqual(caught.exception.code, "DEPENDENCY_UNAVAILABLE")
+		self.assertNotIn(private_detail, str(caught.exception))
+		self.assertIsNone(caught.exception.__cause__)
+		self.assertIsNone(caught.exception.__context__)
+		self.assertEqual(len(self.audit_sink.events), 1)
+		self.assertEqual(self.audit_sink.events[0]["result_code"], "INTERNAL_ERROR")
+		self.assertNotIn(private_detail, repr(self.audit_sink.events[0]))
 
 	def test_backfill_is_idempotent_and_report_contains_only_counters(self):
 		customer = _make_customer()
