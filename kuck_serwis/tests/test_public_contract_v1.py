@@ -4,6 +4,9 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
+from kuck_serwis.kuck_serwis.doctype.kuck_repair_audit_event import (
+	kuck_repair_audit_event as audit_store,
+)
 from kuck_serwis.kuck_serwis.doctype.naprawa.naprawa import PUBLIC_ID_PATTERN
 from kuck_serwis.patches import backfill_naprawa_public_id
 from kuck_serwis.public_contract import v1
@@ -20,6 +23,23 @@ class _CapturingAuditSink:
 	def emit(self, event):
 		self.events.append(dict(event))
 		return self.acknowledge
+
+
+def _make_audit_event(correlation_id=None):
+	return {
+		"event": "kuck_serwis.public_contract.audit.v1",
+		"contract": "kuck-serwis/v1",
+		"schema_revision": 1,
+		"correlation_id": correlation_id or f"corr_{frappe.generate_hash(length=24)}",
+		"operation": "list",
+		"outcome": "success",
+		"actor_class": "website_user",
+		"actor_hash": "a" * 64,
+		"repair_handle_hash": None,
+		"result_code": "OK",
+		"count": 2,
+		"latency_ms": 7,
+	}
 
 
 def _make_user(*, user_type="Website User", enabled=1):
@@ -63,6 +83,157 @@ def _make_repair(customer, **values):
 	}
 	data.update(values)
 	return frappe.get_doc(data).insert(ignore_permissions=True)
+
+
+class TestDurableRepairAuditSink(IntegrationTestCase):
+	def setUp(self):
+		super().setUp()
+		self.correlation_ids = []
+
+	def tearDown(self):
+		# These rows are committed on an isolated connection by design, so the
+		# normal test transaction rollback cannot remove them.
+		frappe.db.rollback()
+		if self.correlation_ids:
+			database = audit_store._new_isolated_database()
+			try:
+				for correlation_id in self.correlation_ids:
+					database.multisql(
+						{
+							"mariadb": ("DELETE FROM `tabKuck Repair Audit Event` WHERE correlation_id = %s"),
+							"postgres": (
+								'DELETE FROM "tabKuck Repair Audit Event" WHERE "correlation_id" = %s'
+							),
+							"sqlite": (
+								'DELETE FROM "tabKuck Repair Audit Event" WHERE "correlation_id" = %s'
+							),
+						},
+						(correlation_id,),
+					)
+				database.commit()
+			finally:
+				database.close()
+		super().tearDown()
+
+	def _event(self):
+		event = _make_audit_event()
+		self.correlation_ids.append(event["correlation_id"])
+		return event
+
+	def _stored_rows(self, correlation_id):
+		database = audit_store._new_isolated_database()
+		try:
+			return database.multisql(
+				{
+					"mariadb": (
+						"SELECT event_id, event, contract, schema_revision, correlation_id, "
+						"operation, outcome, actor_class, actor_hash, repair_handle_hash, "
+						"result_code, count, latency_ms, owner, modified_by "
+						"FROM `tabKuck Repair Audit Event` WHERE correlation_id = %s"
+					),
+					"postgres": (
+						'SELECT "event_id", "event", "contract", "schema_revision", '
+						'"correlation_id", "operation", "outcome", "actor_class", '
+						'"actor_hash", "repair_handle_hash", "result_code", "count", '
+						'"latency_ms", "owner", "modified_by" '
+						'FROM "tabKuck Repair Audit Event" WHERE "correlation_id" = %s'
+					),
+					"sqlite": (
+						'SELECT "event_id", "event", "contract", "schema_revision", '
+						'"correlation_id", "operation", "outcome", "actor_class", '
+						'"actor_hash", "repair_handle_hash", "result_code", "count", '
+						'"latency_ms", "owner", "modified_by" '
+						'FROM "tabKuck Repair Audit Event" WHERE "correlation_id" = %s'
+					),
+				},
+				(correlation_id,),
+				as_dict=True,
+			)
+		finally:
+			database.close()
+
+	def test_real_sink_commits_only_allowlisted_sanitized_event(self):
+		event = self._event()
+		self.assertIs(audit_store.DurableRepairAuditSink().emit(event), True)
+
+		self.assertEqual(frappe.get_meta(audit_store.DOCTYPE).permissions, [])
+		self.assertTrue(frappe.db.get_column_index("tabKuck Repair Audit Event", "event_id", unique=True))
+		self.assertTrue(
+			frappe.db.get_column_index("tabKuck Repair Audit Event", "correlation_id", unique=True)
+		)
+		rows = self._stored_rows(event["correlation_id"])
+		self.assertEqual(len(rows), 1)
+		row = rows[0]
+		self.assertEqual(row.event_id, event["correlation_id"].replace("corr_", "evt_", 1))
+		for fieldname, value in event.items():
+			self.assertEqual(row[fieldname], value)
+		self.assertEqual(row.owner, audit_store._SYSTEM_ACTOR)
+		self.assertEqual(row.modified_by, audit_store._SYSTEM_ACTOR)
+		serialized = repr(row)
+		for forbidden in ("@", "rpr_", "NAP-", "raw_cursor", "Customer"):
+			self.assertNotIn(forbidden, serialized)
+
+	def test_public_contract_returns_only_after_real_sink_commit(self):
+		correlation_suffix = frappe.generate_hash(length=24)
+		correlation_id = f"corr_{correlation_suffix}"
+		self.correlation_ids.append(correlation_id)
+		expected = {"items": [], "next_cursor": None}
+		with (
+			patch.object(v1.secrets, "token_urlsafe", return_value=correlation_suffix),
+			patch.object(v1, "_list_repairs_for_current_user", return_value=expected),
+		):
+			result = v1.list_repairs_for_current_user(None, 20)
+
+		self.assertEqual(result, expected)
+		rows = self._stored_rows(correlation_id)
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0].result_code, "OK")
+		self.assertEqual(rows[0].count, 0)
+
+	def test_duplicate_is_idempotent_but_conflicting_replay_is_rejected(self):
+		event = self._event()
+		sink = audit_store.DurableRepairAuditSink()
+		self.assertIs(sink.emit(event), True)
+		self.assertIs(sink.emit(dict(event)), True)
+		self.assertEqual(len(self._stored_rows(event["correlation_id"])), 1)
+
+		conflicting = {**event, "latency_ms": event["latency_ms"] + 1}
+		with self.assertRaises(audit_store.AuditEventConflictError):
+			sink.emit(conflicting)
+		self.assertEqual(self._stored_rows(event["correlation_id"])[0].latency_ms, 7)
+
+	def test_invalid_or_extended_event_is_rejected_without_storage(self):
+		event = self._event()
+		event["raw_cursor"] = "private@example.test"
+		with self.assertRaises(ValueError):
+			audit_store.DurableRepairAuditSink().emit(event)
+		self.assertEqual(self._stored_rows(event["correlation_id"]), [])
+
+	def test_framework_update_and_delete_are_refused(self):
+		event = self._event()
+		audit_store.DurableRepairAuditSink().emit(event)
+		frappe.db.rollback()
+		document = frappe.get_doc(audit_store.DOCTYPE, event["correlation_id"].replace("corr_", "evt_", 1))
+		document.latency_ms += 1
+		with self.assertRaises(frappe.ValidationError):
+			document.save(ignore_permissions=True)
+		frappe.db.rollback()
+		with self.assertRaises(frappe.ValidationError):
+			frappe.delete_doc(audit_store.DOCTYPE, document.name, ignore_permissions=True)
+		frappe.db.rollback()
+		self.assertEqual(len(self._stored_rows(event["correlation_id"])), 1)
+
+	def test_storage_failure_is_fail_closed_at_public_contract_boundary(self):
+		event = self._event()
+		with (
+			patch.object(audit_store, "_insert_event", side_effect=RuntimeError("database unavailable")),
+			patch.object(v1, "_log_audit_sink_failure") as diagnostic,
+			self.assertRaises(v1.PublicContractError) as caught,
+		):
+			v1._emit_audit_event(audit_store.DurableRepairAuditSink(), event)
+		self.assertEqual(caught.exception.code, "DEPENDENCY_UNAVAILABLE")
+		diagnostic.assert_called_once()
+		self.assertEqual(self._stored_rows(event["correlation_id"]), [])
 
 
 class TestPublicContractV1(IntegrationTestCase):

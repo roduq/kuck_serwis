@@ -1,0 +1,135 @@
+{
+ "actions": [],
+ "autoname": "field:event_id",
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "event_id",
+  "event",
+  "contract",
+  "schema_revision",
+  "correlation_id",
+  "operation",
+  "outcome",
+  "actor_class",
+  "actor_hash",
+  "repair_handle_hash",
+  "result_code",
+  "count",
+  "latency_ms"
+ ],
+ "fields": [
+  {
+   "fieldname": "event_id",
+   "fieldtype": "Data",
+   "label": "Event ID",
+   "no_copy": 1,
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "event",
+   "fieldtype": "Data",
+   "label": "Event",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "contract",
+   "fieldtype": "Data",
+   "label": "Contract",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "schema_revision",
+   "fieldtype": "Int",
+   "label": "Schema Revision",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "label": "Correlation ID",
+   "no_copy": 1,
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "operation",
+   "fieldtype": "Select",
+   "label": "Operation",
+   "options": "list\nget",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Outcome",
+   "options": "success\ndeny\nerror",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "actor_class",
+   "fieldtype": "Select",
+   "label": "Actor Class",
+   "options": "guest\nwebsite_user\nsystem_user\ndisabled_user\nunknown",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "actor_hash",
+   "fieldtype": "Data",
+   "label": "Actor Hash",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "repair_handle_hash",
+   "fieldtype": "Data",
+   "label": "Repair Handle Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result_code",
+   "fieldtype": "Select",
+   "label": "Result Code",
+   "options": "OK\nAUTH_REQUIRED\nNOT_FOUND\nINVALID_CURSOR\nVALIDATION_FAILED\nDEPENDENCY_UNAVAILABLE\nINTERNAL_ERROR",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "count",
+   "fieldtype": "Int",
+   "label": "Count",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "latency_ms",
+   "fieldtype": "Int",
+   "label": "Latency (ms)",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kuck Serwis",
+ "name": "Kuck Repair Audit Event",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

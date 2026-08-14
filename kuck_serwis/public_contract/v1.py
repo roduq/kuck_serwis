@@ -406,8 +406,16 @@ def _run_audited(operation: str, repair_handle: object, call: Callable[[], objec
 
 
 def _get_audit_sink() -> AuditEventSink | None:
-	"""Durable sink integration is pending retention, alert thresholds and rollout approval."""
-	return None
+	"""Return the isolated durable sink; retention/alerts still gate capability rollout."""
+	try:
+		from kuck_serwis.kuck_serwis.doctype.kuck_repair_audit_event.kuck_repair_audit_event import (
+			DurableRepairAuditSink,
+		)
+
+		return DurableRepairAuditSink()
+	except Exception:
+		# Import/configuration failures must preserve the public boundary's fail-closed behavior.
+		return None
 
 
 def _emit_audit_event(sink: AuditEventSink, event: dict[str, object]) -> None:
