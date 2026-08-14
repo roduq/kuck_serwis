@@ -10,6 +10,7 @@ Chronimy logikę, która ma realną wartość dla serwisu (skill watch-service-a
 """
 
 import frappe
+from frappe.core.doctype.file.file import File
 from frappe.model.workflow import apply_workflow
 from frappe.tests import IntegrationTestCase
 from frappe.utils import today
@@ -67,6 +68,27 @@ def _make_naprawa(klient=None, **kwargs):
 	}
 	dane.update(kwargs)
 	return frappe.get_doc(dane)
+
+
+def _make_private_photo(*, owner_doctype, owner_name, fieldname="zdjecie"):
+	return frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": f"synthetic-{frappe.generate_hash(length=8)}.png",
+			"is_private": 1,
+			"content": b"synthetic-private-photo",
+			"attached_to_doctype": owner_doctype,
+			"attached_to_name": owner_name,
+			"attached_to_field": fieldname,
+		}
+	).insert(ignore_permissions=True)
+
+
+def _insert_legacy_public_photo(doc, file_url="/files/legacy-photo.png"):
+	row = doc.append("zdjecia", {"zdjecie": file_url})
+	row.db_insert()
+	doc.reload()
+	return row.name
 
 
 class TestNaprawaKontroler(IntegrationTestCase):
@@ -146,6 +168,52 @@ class TestNaprawaIntegracja(IntegrationTestCase):
 		doc = _make_naprawa(klient_zaakceptowal=1)
 		doc.insert(ignore_permissions=True)
 		self.assertEqual(str(doc.data_akceptacji), today())
+
+	def test_nowa_publiczna_referencja_zdjecia_jest_blokowana(self):
+		doc = _make_naprawa(zdjecia=[{"zdjecie": "/files/new-photo.png"}])
+		with self.assertRaisesRegex(frappe.ValidationError, "^PUBLIC_PHOTO_FORBIDDEN$"):
+			doc.insert(ignore_permissions=True)
+
+	def test_private_file_musi_byc_exact_attachment_naprawy(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		photo = _make_private_photo(owner_doctype="Naprawa", owner_name=doc.name)
+		self.assertIsInstance(photo, File)
+		self.assertEqual(
+			(photo.attached_to_doctype, photo.attached_to_name, photo.attached_to_field),
+			("Naprawa", doc.name, "zdjecie"),
+		)
+		doc.append("zdjecia", {"zdjecie": photo.file_url})
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual(doc.zdjecia[0].zdjecie, photo.file_url)
+
+	def test_private_url_without_exact_attachment_is_rejected(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		photo = _make_private_photo(owner_doctype="Naprawa", owner_name="SER-WRONG")
+		doc.append("zdjecia", {"zdjecie": photo.file_url})
+		with self.assertRaisesRegex(frappe.ValidationError, "^PRIVATE_FILE_REQUIRED$"):
+			doc.save(ignore_permissions=True)
+
+	def test_unchanged_legacy_public_child_is_grandfathered(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		row_name = _insert_legacy_public_photo(doc)
+		doc.model_zegarka = "Unrelated change"
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual(doc.zdjecia[0].name, row_name)
+		self.assertEqual(doc.zdjecia[0].zdjecie, "/files/legacy-photo.png")
+
+	def test_changed_or_readded_legacy_public_child_is_rejected(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		_insert_legacy_public_photo(doc)
+		doc.zdjecia[0].zdjecie = "/files/changed.png"
+		with self.assertRaisesRegex(frappe.ValidationError, "^PUBLIC_PHOTO_FORBIDDEN$"):
+			doc.save(ignore_permissions=True)
+		doc.reload()
+		doc.remove(doc.zdjecia[0])
+		doc.append("zdjecia", {"zdjecie": "/files/legacy-photo.png"})
+		with self.assertRaisesRegex(frappe.ValidationError, "^PUBLIC_PHOTO_FORBIDDEN$"):
+			doc.save(ignore_permissions=True)
 
 	def test_workflow_blokuje_wejscie_w_naprawe_bez_akceptacji(self):
 		doc = _make_naprawa(klient_zaakceptowal=0)
@@ -332,9 +400,7 @@ class TestSeedSlownikow(IntegrationTestCase):
 
 		# marki z zestawienia klienta
 		for marka in seed.MARKI:
-			self.assertTrue(
-				frappe.db.exists("Marka Zegarka", marka), f"brak marki: {marka}"
-			)
+			self.assertTrue(frappe.db.exists("Marka Zegarka", marka), f"brak marki: {marka}")
 
 	def test_seed_jest_idempotentny(self):
 		seed.seed_all()
@@ -353,6 +419,8 @@ class TestSeedSlownikow(IntegrationTestCase):
 
 	def test_kategoria_jest_wymagana_na_usterce(self):
 		# pole kategoria stało się wymagane — usterka bez niej nie może powstać
-		doc = frappe.get_doc({"doctype": "Usterka", "nazwa": "Usterka bez kategorii " + frappe.generate_hash(length=6)})
+		doc = frappe.get_doc(
+			{"doctype": "Usterka", "nazwa": "Usterka bez kategorii " + frappe.generate_hash(length=6)}
+		)
 		with self.assertRaises(frappe.MandatoryError):
 			doc.insert(ignore_permissions=True)

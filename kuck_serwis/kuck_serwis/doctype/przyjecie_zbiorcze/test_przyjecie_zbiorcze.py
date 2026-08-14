@@ -10,7 +10,10 @@ normalne naprawy. Chronimy więc to, co ma wartość dla serwisu (skill watch-se
 - walidacja chroni przed pustą partią / pozycją bez identyfikacji zegarka.
 """
 
+from unittest.mock import patch
+
 import frappe
+from frappe.core.doctype.file.file import File
 from frappe.tests import IntegrationTestCase
 from frappe.utils import today
 
@@ -54,6 +57,27 @@ def _make_przyjecie(klient=None, pozycje=None, **kwargs):
 	}
 	dane.update(kwargs)
 	return frappe.get_doc(dane)
+
+
+def _make_private_photo(*, owner_name):
+	return frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": f"synthetic-{frappe.generate_hash(length=8)}.png",
+			"is_private": 1,
+			"content": b"synthetic-private-photo",
+			"attached_to_doctype": "Przyjecie Zbiorcze",
+			"attached_to_name": owner_name,
+			"attached_to_field": "zdjecie",
+		}
+	).insert(ignore_permissions=True)
+
+
+def _insert_legacy_public_photo(doc, file_url="/files/legacy-photo.png"):
+	row = doc.append("pozycje", {"model_zegarka": "Legacy", "zdjecie": file_url})
+	row.db_insert()
+	doc.reload()
+	return row.name
 
 
 class TestPrzyjecieZbiorczeWalidacja(IntegrationTestCase):
@@ -119,9 +143,7 @@ class TestPrzyjecieZbiorczeTworzenie(IntegrationTestCase):
 		self.assertEqual(n1.status, "Przyjęto")
 
 	def test_idempotencja_nie_duplikuje_napraw(self):
-		doc = _make_przyjecie(
-			pozycje=[{"model_zegarka": "Zegarek A"}, {"model_zegarka": "Zegarek B"}]
-		)
+		doc = _make_przyjecie(pozycje=[{"model_zegarka": "Zegarek A"}, {"model_zegarka": "Zegarek B"}])
 		doc.insert(ignore_permissions=True)
 
 		pierwsze = doc.utworz_naprawy()
@@ -154,17 +176,101 @@ class TestPrzyjecieZbiorczeTworzenie(IntegrationTestCase):
 		self.assertEqual(str(n.data_akceptacji), today())
 		self.assertEqual(n.akceptacja_uwagi, "zgoda przy przyjęciu")
 
-	def test_zdjecie_pozycji_trafia_do_naprawy(self):
-		doc = _make_przyjecie(
-			pozycje=[{"model_zegarka": "Zegarek Z", "zdjecie": "/files/test.png"}]
-		)
+	def test_nowe_publiczne_zdjecie_pozycji_jest_blokowane(self):
+		doc = _make_przyjecie(pozycje=[{"model_zegarka": "Zegarek Z", "zdjecie": "/files/test.png"}])
+		with self.assertRaisesRegex(frappe.ValidationError, "^PUBLIC_PHOTO_FORBIDDEN$"):
+			doc.insert(ignore_permissions=True)
+
+	def test_private_attachment_jest_kopiowany_do_naprawy_bez_odczytu_tresci_i_commita(self):
+		doc = _make_przyjecie(pozycje=[{"model_zegarka": "Zegarek Z"}])
 		doc.insert(ignore_permissions=True)
-		doc.utworz_naprawy()
+		photo = _make_private_photo(owner_name=doc.name)
+		doc.pozycje[0].zdjecie = photo.file_url
+		doc.save(ignore_permissions=True)
+
+		with (
+			patch.object(File, "get_content", side_effect=AssertionError("content read forbidden")),
+			patch.object(frappe.db, "commit", side_effect=AssertionError("commit forbidden")),
+		):
+			created = doc.utworz_naprawy()
+		self.assertEqual(len(created), 1)
 		doc.reload()
 
 		n = frappe.get_doc("Naprawa", doc.pozycje[0].naprawa)
 		self.assertEqual(len(n.zdjecia), 1)
-		self.assertEqual(n.zdjecia[0].zdjecie, "/files/test.png")
+		self.assertEqual(n.zdjecia[0].zdjecie, photo.file_url)
+		target_files = frappe.get_all(
+			"File",
+			filters={
+				"file_url": photo.file_url,
+				"attached_to_doctype": "Naprawa",
+				"attached_to_name": n.name,
+				"attached_to_field": "zdjecie",
+			},
+			fields=["name", "is_private"],
+		)
+		self.assertEqual(len(target_files), 1)
+		self.assertEqual(target_files[0].is_private, 1)
+		photo.reload()
+		self.assertEqual(
+			(photo.attached_to_doctype, photo.attached_to_name, photo.attached_to_field),
+			("Przyjecie Zbiorcze", doc.name, "zdjecie"),
+		)
+
+	def test_caller_rollback_cofa_naprawe_i_attachment_copy(self):
+		doc = _make_przyjecie(pozycje=[{"model_zegarka": "Rollback"}])
+		doc.insert(ignore_permissions=True)
+		photo = _make_private_photo(owner_name=doc.name)
+		doc.pozycje[0].zdjecie = photo.file_url
+		doc.save(ignore_permissions=True)
+		frappe.db.savepoint("g0_50_caller_rollback")
+
+		created = doc.utworz_naprawy()
+		self.assertEqual(len(created), 1)
+		self.assertTrue(frappe.db.exists("Naprawa", created[0]))
+		self.assertTrue(
+			frappe.db.exists(
+				"File",
+				{
+					"file_url": photo.file_url,
+					"attached_to_doctype": "Naprawa",
+					"attached_to_name": created[0],
+				},
+			)
+		)
+
+		frappe.db.rollback(save_point="g0_50_caller_rollback")
+		self.assertFalse(frappe.db.exists("Naprawa", created[0]))
+		self.assertFalse(
+			frappe.db.exists(
+				"File",
+				{
+					"file_url": photo.file_url,
+					"attached_to_doctype": "Naprawa",
+					"attached_to_name": created[0],
+				},
+			)
+		)
+
+	def test_legacy_public_photo_nie_jest_transferowane_i_nie_tworzona_jest_naprawa(self):
+		doc = _make_przyjecie(pozycje=[{"model_zegarka": "Current"}]).insert(ignore_permissions=True)
+		row_name = _insert_legacy_public_photo(doc)
+		doc.akceptacja_uwagi = "Unrelated change"
+		doc.save(ignore_permissions=True)
+		doc.reload()
+		self.assertEqual(doc.pozycje[-1].name, row_name)
+		self.assertEqual(doc.pozycje[-1].zdjecie, "/files/legacy-photo.png")
+		before = frappe.db.count("Naprawa", {"klient": doc.klient})
+		with self.assertRaisesRegex(frappe.ValidationError, "^PUBLIC_PHOTO_FORBIDDEN$"):
+			doc.utworz_naprawy()
+		self.assertEqual(frappe.db.count("Naprawa", {"klient": doc.klient}), before)
+
+	def test_zmienione_legacy_public_photo_jest_blokowane(self):
+		doc = _make_przyjecie(pozycje=[{"model_zegarka": "Current"}]).insert(ignore_permissions=True)
+		_insert_legacy_public_photo(doc)
+		doc.pozycje[-1].zdjecie = "/files/changed.png"
+		with self.assertRaisesRegex(frappe.ValidationError, "^PUBLIC_PHOTO_FORBIDDEN$"):
+			doc.save(ignore_permissions=True)
 
 
 def _ensure_marka():

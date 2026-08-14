@@ -10,6 +10,14 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, today
 
+from kuck_serwis.repair_photo_policy import (
+	PrivateFileEvidence,
+	RepairPhotoPolicyCode,
+	RepairPhotoPolicyError,
+	RepairPhotoRow,
+	validate_repair_photo_references,
+)
+
 # Typy napraw, które bywają bezpłatne — przy wydaniu nie wymuszamy na nich kwoty > 0.
 RODZAJE_BEZPLATNE = ("Gwarancja", "Reklamacja")
 PUBLIC_ID_PATTERN = re.compile(r"^rpr_[A-Za-z0-9_-]{32}$")
@@ -24,11 +32,32 @@ class Naprawa(Document):
 
 	def validate(self):
 		self.validate_public_id_immutable()
+		self.validate_photo_privacy()
 		self.ustaw_kategorie_glowna()
 		self.set_akceptacja_date()
 		self.guard_w_naprawie()
 		self.uzupelnij_kwote_odbioru()
 		self.set_data_wydania()
+
+	def validate_photo_privacy(self):
+		"""Stop new public references while preserving exact legacy child rows."""
+		if not self.zdjecia:
+			return
+		current_rows = tuple(
+			RepairPhotoRow(name=row.name, parent=row.parent, file_url=row.zdjecie) for row in self.zdjecia
+		)
+		stored_rows = () if self.is_new() else _stored_photo_rows(self.name)
+		private_files = _private_file_evidence(tuple(row.zdjecie for row in self.zdjecia))
+		try:
+			validate_repair_photo_references(
+				owner_doctype="Naprawa",
+				owner_name=self.name,
+				current_rows=current_rows,
+				stored_rows=stored_rows,
+				private_files=private_files,
+			)
+		except RepairPhotoPolicyError as error:
+			frappe.throw(error.code.value)
 
 	def validate_public_id_immutable(self):
 		"""Nie pozwala formularzom, importom ani kodowi API zmieniać publicznego ID."""
@@ -162,3 +191,51 @@ def generate_unique_public_id():
 		):
 			return candidate
 	frappe.throw(_("Nie udało się nadać publicznego identyfikatora naprawy."))
+
+
+def _stored_photo_rows(parent: str) -> tuple[RepairPhotoRow, ...]:
+	rows = frappe.get_all(
+		"Naprawa Zdjecie",
+		filters={"parent": parent, "parenttype": "Naprawa", "parentfield": "zdjecia"},
+		fields=["name", "parent", "zdjecie"],
+		order_by="idx asc",
+	)
+	return tuple(RepairPhotoRow(name=row.name, parent=row.parent, file_url=row.zdjecie) for row in rows)
+
+
+def _private_file_evidence(file_urls: tuple[str, ...]) -> tuple[PrivateFileEvidence, ...]:
+	private_urls = tuple(url for url in file_urls if type(url) is str and url.startswith("/private/files/"))
+	if not private_urls:
+		return ()
+	rows = frappe.get_all(
+		"File",
+		filters={"file_url": ("in", private_urls)},
+		fields=[
+			"name",
+			"file_url",
+			"is_private",
+			"attached_to_doctype",
+			"attached_to_name",
+			"attached_to_field",
+		],
+		order_by="name asc",
+	)
+	return tuple(
+		PrivateFileEvidence(
+			name=row.name,
+			file_url=row.file_url,
+			is_private=_exact_file_private_flag(row.is_private),
+			attached_to_doctype=row.attached_to_doctype,
+			attached_to_name=row.attached_to_name,
+			attached_to_field=row.attached_to_field,
+		)
+		for row in rows
+	)
+
+
+def _exact_file_private_flag(value: object) -> bool:
+	if type(value) is bool:
+		return value
+	if type(value) is int and value in (0, 1):
+		return bool(value)
+	raise RepairPhotoPolicyError(RepairPhotoPolicyCode.INVALID_INPUT)
