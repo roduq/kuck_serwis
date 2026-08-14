@@ -9,6 +9,8 @@ Chronimy logikę, która ma realną wartość dla serwisu (skill watch-service-a
 - spójność procesu (Workflow) i konfiguracji powiadomień.
 """
 
+from unittest.mock import patch
+
 import frappe
 from frappe.core.doctype.file.file import File
 from frappe.model.workflow import apply_workflow
@@ -16,6 +18,8 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import today
 
 from kuck_serwis import api, install, seed
+from kuck_serwis.contact_update import ContactUpdateCode
+from kuck_serwis.kuck_serwis.doctype.naprawa import naprawa as naprawa_controller
 
 # Klient naprawy to ERPNext Customer. Nie pozwalamy frameworkowi auto-generować rekordów
 # testowych Customera — ciągnie to ciężki łańcuch zależności ERPNext (Company, Loyalty
@@ -91,6 +95,23 @@ def _insert_legacy_public_photo(doc, file_url="/files/legacy-photo.png"):
 	return row.name
 
 
+def _primary_contact(customer_name):
+	customer = frappe.get_doc("Customer", customer_name)
+	return customer, frappe.get_doc("Contact", customer.customer_primary_contact)
+
+
+def _set_primary_contact_values(customer_name, *, phone=None, email=None):
+	customer, contact = _primary_contact(customer_name)
+	if phone is not None:
+		naprawa_controller._ustaw_glowny_telefon(contact, phone)
+	if email is not None:
+		naprawa_controller._ustaw_glowny_email(contact, email)
+	contact.flags.ignore_mandatory = True
+	contact.save(ignore_permissions=True)
+	customer.db_set({"mobile_no": contact.mobile_no, "email_id": contact.email_id})
+	return contact
+
+
 class TestNaprawaKontroler(IntegrationTestCase):
 	"""Czyste testy metod validate() — bez udziału workflow (in-memory)."""
 
@@ -163,6 +184,196 @@ class TestNaprawaIntegracja(IntegrationTestCase):
 		self.assertEqual(doc.klient_nazwa, klient.customer_name)
 		self.assertEqual(doc.klient_telefon, "+48600700800")
 		self.assertEqual(doc.klient_email, "anna.kowalska@example.com")
+
+	def test_new_and_customer_changed_save_do_not_access_contact_target(self):
+		with patch.object(
+			naprawa_controller,
+			"_lock_contact_target",
+			side_effect=AssertionError("CONTACT_TARGET_ACCESSED"),
+		) as target:
+			doc = _make_naprawa().insert(ignore_permissions=True)
+			target.assert_not_called()
+			doc.klient = _make_klient().name
+			doc.save(ignore_permissions=True)
+		target.assert_not_called()
+
+	def test_unrelated_save_does_not_read_or_write_contact_target(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		baseline = (doc.klient_telefon, doc.klient_email)
+		_set_primary_contact_values(
+			doc.klient,
+			phone="+48500100201",
+			email="synthetic-current@example.test",
+		)
+		doc.model_zegarka = "Unrelated synthetic change"
+		with patch.object(
+			naprawa_controller,
+			"_lock_contact_target",
+			side_effect=AssertionError("CONTACT_TARGET_ACCESSED"),
+		) as target:
+			doc.save(ignore_permissions=True)
+		target.assert_not_called()
+		customer, contact = _primary_contact(doc.klient)
+		self.assertEqual(
+			(contact.mobile_no, contact.email_id), ("+48500100201", "synthetic-current@example.test")
+		)
+		self.assertEqual(
+			(customer.mobile_no, customer.email_id), ("+48500100201", "synthetic-current@example.test")
+		)
+		self.assertEqual(
+			frappe.db.get_value("Naprawa", doc.name, ["klient_telefon", "klient_email"]),
+			baseline,
+		)
+
+	def test_phone_apply_preserves_concurrent_email_and_child_rows(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		customer, contact = _primary_contact(doc.klient)
+		contact.append("phone_nos", {"phone": "+48500100202"})
+		contact.append("email_ids", {"email_id": "synthetic-secondary@example.test"})
+		contact.save(ignore_permissions=True)
+		_set_primary_contact_values(doc.klient, email="synthetic-concurrent@example.test")
+
+		doc.klient_telefon = "+48500100203"
+		doc.save(ignore_permissions=True)
+		customer, contact = _primary_contact(doc.klient)
+		self.assertEqual(contact.mobile_no, "+48500100203")
+		self.assertEqual(contact.email_id, "synthetic-concurrent@example.test")
+		self.assertEqual((customer.mobile_no, customer.email_id), (contact.mobile_no, contact.email_id))
+		self.assertIn("+48500100202", {row.phone for row in contact.phone_nos})
+		self.assertIn("synthetic-secondary@example.test", {row.email_id for row in contact.email_ids})
+
+	def test_email_apply_preserves_concurrent_phone(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		_set_primary_contact_values(doc.klient, phone="+48500100204")
+		doc.klient_email = "synthetic-proposed@example.test"
+		doc.save(ignore_permissions=True)
+		customer, contact = _primary_contact(doc.klient)
+		self.assertEqual(contact.mobile_no, "+48500100204")
+		self.assertEqual(contact.email_id, "synthetic-proposed@example.test")
+		self.assertEqual((customer.mobile_no, customer.email_id), (contact.mobile_no, contact.email_id))
+
+	def test_customer_fallback_preserves_unrelated_current_field(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		frappe.db.set_value("Customer", doc.klient, "customer_primary_contact", None)
+		frappe.db.set_value("Customer", doc.klient, "email_id", "synthetic-current@example.test")
+		doc.klient_telefon = "+48500100203"
+		doc.save(ignore_permissions=True)
+		self.assertEqual(
+			frappe.db.get_value("Customer", doc.klient, ["mobile_no", "email_id"]),
+			("+48500100203", "synthetic-current@example.test"),
+		)
+
+	def test_same_field_change_conflicts_before_naprawa_write(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		baseline = doc.klient_telefon
+		_set_primary_contact_values(doc.klient, phone="+48500100204")
+		doc.klient_telefon = "+48500100203"
+		with self.assertRaisesRegex(
+			frappe.ValidationError,
+			f"^{ContactUpdateCode.CONTACT_REVISION_CONFLICT.value}$",
+		):
+			doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Naprawa", doc.name, "klient_telefon"), baseline)
+		self.assertEqual(_primary_contact(doc.klient)[1].mobile_no, "+48500100204")
+
+	def test_same_email_change_conflicts_without_partial_write(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		baseline = doc.klient_email
+		_set_primary_contact_values(doc.klient, email="synthetic-concurrent@example.test")
+		doc.klient_email = "synthetic-proposed@example.test"
+		with self.assertRaisesRegex(
+			frappe.ValidationError,
+			f"^{ContactUpdateCode.CONTACT_REVISION_CONFLICT.value}$",
+		):
+			doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Naprawa", doc.name, "klient_email"), baseline)
+		self.assertEqual(
+			_primary_contact(doc.klient)[1].email_id,
+			"synthetic-concurrent@example.test",
+		)
+
+	def test_already_applied_value_is_idempotent(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		_set_primary_contact_values(doc.klient, phone="+48500100205")
+		doc.klient_telefon = "+48500100205"
+		doc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Naprawa", doc.name, "klient_telefon"), "+48500100205")
+		self.assertEqual(_primary_contact(doc.klient)[1].mobile_no, "+48500100205")
+
+	def test_contact_clear_is_rejected_before_target_read(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		previous = frappe.get_doc("Naprawa", doc.name)
+		doc._doc_before_save = previous
+		doc.klient_telefon = ""
+		with patch.object(
+			naprawa_controller,
+			"_lock_contact_target",
+			side_effect=AssertionError("CONTACT_TARGET_ACCESSED"),
+		) as target:
+			with self.assertRaisesRegex(
+				frappe.ValidationError,
+				f"^{ContactUpdateCode.CONTACT_CLEAR_UNSUPPORTED.value}$",
+			):
+				doc.prepare_contact_update()
+		target.assert_not_called()
+
+	def test_swapped_primary_contact_is_rejected(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		other = _make_klient()
+		other_contact = _primary_contact(other.name)[1]
+		frappe.db.set_value("Customer", doc.klient, "customer_primary_contact", other_contact.name)
+		doc.klient_telefon = "+48500100203"
+		with self.assertRaisesRegex(
+			frappe.ValidationError,
+			f"^{ContactUpdateCode.CONTACT_TARGET_MISMATCH.value}$",
+		):
+			doc.save(ignore_permissions=True)
+		self.assertNotEqual(other_contact.reload().mobile_no, "+48500100203")
+
+	def test_parent_ignore_permissions_does_not_bypass_contact_permission(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		doc.klient_telefon = "+48500100203"
+		real_has_permission = frappe.has_permission
+
+		def permission(doctype, *args, **kwargs):
+			if doctype == "Contact":
+				return False
+			return real_has_permission(doctype, *args, **kwargs)
+
+		with patch.object(naprawa_controller.frappe, "has_permission", side_effect=permission):
+			with self.assertRaisesRegex(
+				frappe.ValidationError,
+				f"^{ContactUpdateCode.CONTACT_UPDATE_FORBIDDEN.value}$",
+			):
+				doc.save(ignore_permissions=True)
+		self.assertNotEqual(_primary_contact(doc.klient)[1].mobile_no, "+48500100203")
+
+	def test_target_reads_use_for_update(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		calls = []
+		real_get_doc = frappe.get_doc
+
+		def get_doc(*args, **kwargs):
+			if args and args[0] in {"Customer", "Contact"}:
+				calls.append((args[0], kwargs.get("for_update")))
+			return real_get_doc(*args, **kwargs)
+
+		with patch.object(naprawa_controller.frappe, "get_doc", side_effect=get_doc):
+			naprawa_controller._lock_contact_target(doc.klient)
+		self.assertEqual(calls, [("Customer", True), ("Contact", True)])
+
+	def test_success_obeys_caller_transaction_and_rollback(self):
+		doc = _make_naprawa().insert(ignore_permissions=True)
+		baseline = doc.klient_telefon
+		frappe.db.savepoint("g0_55_caller_rollback")
+		with patch.object(frappe.db, "commit", side_effect=AssertionError("COMMIT_CALLED")) as commit:
+			doc.klient_telefon = "+48500100206"
+			doc.save(ignore_permissions=True)
+		commit.assert_not_called()
+		self.assertEqual(_primary_contact(doc.klient)[1].mobile_no, "+48500100206")
+		frappe.db.rollback(save_point="g0_55_caller_rollback")
+		self.assertEqual(_primary_contact(doc.klient)[1].mobile_no, baseline)
+		self.assertEqual(frappe.db.get_value("Naprawa", doc.name, "klient_telefon"), baseline)
 
 	def test_insert_ustawia_date_akceptacji(self):
 		doc = _make_naprawa(klient_zaakceptowal=1)

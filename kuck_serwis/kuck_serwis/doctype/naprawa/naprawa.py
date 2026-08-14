@@ -10,6 +10,13 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, today
 
+from kuck_serwis.contact_update import (
+	ContactSnapshot,
+	ContactUpdateCode,
+	ContactUpdateOutcome,
+	ContactUpdatePlan,
+	plan_contact_update,
+)
 from kuck_serwis.repair_photo_policy import (
 	PrivateFileEvidence,
 	RepairPhotoPolicyCode,
@@ -38,6 +45,7 @@ class Naprawa(Document):
 		self.guard_w_naprawie()
 		self.uzupelnij_kwote_odbioru()
 		self.set_data_wydania()
+		self.prepare_contact_update()
 
 	def validate_photo_privacy(self):
 		"""Stop new public references while preserving exact legacy child rows."""
@@ -99,51 +107,68 @@ class Naprawa(Document):
 			frappe.throw(_("Podaj kwotę odbioru przed wydaniem zegarka."))
 
 	def on_update(self):
-		self.zapisz_kontakt_u_klienta()
+		self.apply_prepared_contact_update()
 
-	def zapisz_kontakt_u_klienta(self):
-		"""Telefon/e-mail to dane KLIENTA (Customer), nie naprawy.
+	def prepare_contact_update(self):
+		"""Prepare a field-level CAS before the Naprawa row is written.
 
-		Pola na naprawie są tylko wygodnym oknem do danych klienta: przy wyborze
-		klienta zaciągają się automatycznie (fetch_from), a edycja tutaj zapisuje się
-		z powrotem przy kliencie. W ERPNext dane kontaktowe żyją w Contact (Customer
-		pokazuje je tylko jako podsumowanie), więc — jeśli klient ma główny kontakt —
-		aktualizujemy ten kontakt; jeśli nie, zapisujemy wprost na Customerze.
+		An unrelated save intentionally leaves the stored Naprawa contact snapshot
+		unchanged.  It is an inert editing baseline, not a source-of-truth refresh;
+		this can cause a safe conflict on a later explicit edit rather than overwrite
+		a newer Customer/Contact value.
 		"""
-		if not self.klient or not (self.klient_telefon or self.klient_email):
-			return
-
-		customer = frappe.get_doc("Customer", self.klient)
-		tel_zmieniony = self.klient_telefon and self.klient_telefon != (customer.mobile_no or "")
-		mail_zmieniony = self.klient_email and self.klient_email != (customer.email_id or "")
-		if not (tel_zmieniony or mail_zmieniony):
-			return
-
-		if customer.customer_primary_contact:
-			self._zapisz_w_kontakcie(customer)
-		else:
-			zmiany = {}
-			if tel_zmieniony:
-				zmiany["mobile_no"] = self.klient_telefon
-			if mail_zmieniony:
-				zmiany["email_id"] = self.klient_email
-			frappe.db.set_value("Customer", self.klient, zmiany)
-
-	def _zapisz_w_kontakcie(self, customer):
-		"""Ustawia telefon/e-mail jako główne w kontakcie klienta i odświeża podsumowanie na Customerze."""
-		contact = frappe.get_doc("Contact", customer.customer_primary_contact)
-		if self.klient_telefon:
-			_ustaw_glowny_telefon(contact, self.klient_telefon)
-		if self.klient_email:
-			_ustaw_glowny_email(contact, self.klient_email)
-		contact.flags.ignore_mandatory = True
-		contact.save(ignore_permissions=True)
-		# Customer.mobile_no/email_id to fetch_from głównego kontaktu — odświeżamy go zapisem.
-		frappe.db.set_value(
-			"Customer",
-			customer.name,
-			{"mobile_no": contact.mobile_no, "email_id": contact.email_id},
+		previous = self.get_doc_before_save()
+		baseline = _contact_snapshot(previous)
+		proposed = _contact_snapshot(self)
+		preflight = plan_contact_update(
+			is_new=previous is None,
+			customer_changed=previous is not None and previous.klient != self.klient,
+			baseline=baseline,
+			proposed=proposed,
+			current=baseline,
 		)
+		self.flags.contact_update_plan = preflight
+		self.flags.contact_update_customer = None
+		self.flags.contact_update_contact = None
+		_raise_contact_conflict(preflight)
+		if preflight.outcome is not ContactUpdateOutcome.APPLY:
+			return
+
+		customer, contact = _lock_contact_target(self.klient)
+		current = _contact_snapshot(contact or customer)
+		plan = plan_contact_update(
+			is_new=False,
+			customer_changed=False,
+			baseline=baseline,
+			proposed=proposed,
+			current=current,
+		)
+		_raise_contact_conflict(plan)
+		self.flags.contact_update_plan = plan
+		self.flags.contact_update_customer = customer
+		self.flags.contact_update_contact = contact
+
+	def apply_prepared_contact_update(self):
+		plan = self.flags.get("contact_update_plan")
+		if type(plan) is not ContactUpdatePlan or plan.outcome is not ContactUpdateOutcome.APPLY:
+			return
+		customer = self.flags.get("contact_update_customer")
+		contact = self.flags.get("contact_update_contact")
+		if contact is not None:
+			if plan.update_phone:
+				_ustaw_glowny_telefon(contact, plan.phone)
+			if plan.update_email:
+				_ustaw_glowny_email(contact, plan.email)
+			contact.flags.ignore_mandatory = True
+			contact.save()
+			customer.db_set({"mobile_no": contact.mobile_no, "email_id": contact.email_id})
+			return
+		changes = {}
+		if plan.update_phone:
+			changes["mobile_no"] = plan.phone
+		if plan.update_email:
+			changes["email_id"] = plan.email
+		customer.db_set(changes)
 
 	def set_akceptacja_date(self):
 		"""Akceptacja może nastąpić na każdym etapie (także z góry przy przyjęciu)."""
@@ -162,6 +187,44 @@ class Naprawa(Document):
 	def set_data_wydania(self):
 		if self.status == "Wydano" and not self.data_wydania:
 			self.data_wydania = today()
+
+
+def _contact_snapshot(document) -> ContactSnapshot:
+	if document is None:
+		return ContactSnapshot(phone="", email="")
+	return ContactSnapshot(
+		phone=(getattr(document, "klient_telefon", None) or getattr(document, "mobile_no", None) or ""),
+		email=(getattr(document, "klient_email", None) or getattr(document, "email_id", None) or ""),
+	)
+
+
+def _raise_contact_conflict(plan: ContactUpdatePlan) -> None:
+	if plan.outcome is ContactUpdateOutcome.CONFLICT:
+		frappe.throw(plan.code.value)
+
+
+def _require_contact_write_permission(document) -> None:
+	if not frappe.has_permission(document.doctype, ptype="write", doc=document):
+		frappe.throw(ContactUpdateCode.CONTACT_UPDATE_FORBIDDEN.value)
+
+
+def _lock_contact_target(customer_name: str):
+	customer = frappe.get_doc("Customer", customer_name, for_update=True)
+	_require_contact_write_permission(customer)
+	contact = None
+	if customer.customer_primary_contact:
+		contact = frappe.get_doc("Contact", customer.customer_primary_contact, for_update=True)
+		_validate_contact_owner(contact, customer.name)
+		_require_contact_write_permission(contact)
+	return customer, contact
+
+
+def _validate_contact_owner(contact, customer_name: str) -> None:
+	customer_links = tuple(
+		link.link_name for link in (contact.links or ()) if link.link_doctype == "Customer"
+	)
+	if customer_links != (customer_name,):
+		frappe.throw(ContactUpdateCode.CONTACT_TARGET_MISMATCH.value)
 
 
 def _ustaw_glowny_telefon(contact, telefon):
