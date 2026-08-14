@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 import frappe
@@ -6,6 +7,8 @@ from frappe.tests import IntegrationTestCase
 from kuck_serwis.kuck_serwis.doctype.naprawa.naprawa import PUBLIC_ID_PATTERN
 from kuck_serwis.patches import backfill_naprawa_public_id
 from kuck_serwis.public_contract import v1
+
+TEST_CURSOR_KEY = bytes([66]) * 32
 
 
 def _make_user(*, user_type="Website User", enabled=1):
@@ -73,11 +76,9 @@ class TestPublicContractV1(IntegrationTestCase):
 			{"contract": "kuck-serwis/v1", "schema_revision": 1, "features": []},
 		)
 		frappe.conf[v1.ROLLOUT_FLAG] = True
-		# Signed keyset cursors are deliberately not part of this slice.
-		self.assertEqual(v1.get_capabilities()["features"], [])
-		with self.assertRaises(v1.PublicContractError) as caught:
-			v1.list_repairs_for_current_user(None, 20)
-		self.assertEqual(caught.exception.code, "DEPENDENCY_UNAVAILABLE")
+		with patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY):
+			# Audit and monitoring are the remaining hard readiness gate.
+			self.assertEqual(v1.get_capabilities()["features"], [])
 		with patch.object(v1, "_is_ready", return_value=True):
 			self.assertEqual(v1.get_capabilities()["features"], ["account-read"])
 		frappe.conf[v1.ROLLOUT_FLAG] = False
@@ -202,7 +203,10 @@ class TestPublicContractV1(IntegrationTestCase):
 		user = _make_user()
 		_make_customer(user)
 		frappe.set_user(user.name)
-		with patch.object(v1, "_account_read_enabled", return_value=True):
+		with (
+			patch.object(v1, "_account_read_enabled", return_value=True),
+			patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY),
+		):
 			for invalid in (0, 51, 1.0, True):
 				with self.assertRaises(v1.PublicContractError) as caught:
 					v1.list_repairs_for_current_user(None, invalid)
@@ -210,6 +214,101 @@ class TestPublicContractV1(IntegrationTestCase):
 			with self.assertRaises(v1.PublicContractError) as caught:
 				v1.list_repairs_for_current_user("unsigned", 20)
 			self.assertEqual(caught.exception.code, "INVALID_CURSOR")
+
+	def test_signed_keyset_pagination_has_no_duplicates_or_omissions(self):
+		user = _make_user()
+		customer = _make_customer(user)
+		repairs = [_make_repair(customer, model_zegarka=f"Page {index}") for index in range(5)]
+		creation_values = (
+			"2026-08-14 12:00:05.000000",
+			"2026-08-14 12:00:04.000000",
+			"2026-08-14 12:00:04.000000",
+			"2026-08-14 12:00:03.000000",
+			"2026-08-14 12:00:02.000000",
+		)
+		for repair, creation in zip(repairs, creation_values, strict=True):
+			frappe.db.set_value("Naprawa", repair.name, "creation", creation, update_modified=False)
+		expected = [
+			repair.public_id
+			for repair, _creation in sorted(
+				zip(repairs, creation_values, strict=True),
+				key=lambda pair: (pair[1], pair[0].public_id),
+				reverse=True,
+			)
+		]
+
+		frappe.set_user(user.name)
+		seen = []
+		cursor = None
+		pages = 0
+		with (
+			patch.object(v1, "_account_read_enabled", return_value=True),
+			patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY),
+			patch.object(v1, "_now_timestamp", return_value=10_000),
+		):
+			while True:
+				result = v1.list_repairs_for_current_user(cursor, 2)
+				pages += 1
+				seen.extend(item["repair_id"] for item in result["items"])
+				cursor = result["next_cursor"]
+				if cursor is None:
+					break
+				self.assertRegex(cursor, r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+				decoded_payload = json.loads(v1._base64url_decode(cursor.split(".", 1)[0]))
+				self.assertEqual(set(decoded_payload), v1._CURSOR_FIELDS)
+				self.assertNotIn(user.name, repr(decoded_payload))
+				self.assertNotIn(customer.name, repr(decoded_payload))
+
+		self.assertEqual(pages, 3)
+		self.assertEqual(seen, expected)
+		self.assertEqual(len(seen), len(set(seen)))
+
+	def test_cursor_rejects_tamper_expiry_cross_user_scope_change_and_schema(self):
+		user_a = _make_user()
+		user_b = _make_user()
+		customer_a = _make_customer(user_a)
+		customer_b = _make_customer(user_b)
+		_make_repair(customer_a, model_zegarka="First")
+		_make_repair(customer_a, model_zegarka="Second")
+		_make_repair(customer_b, model_zegarka="Foreign")
+		frappe.set_user(user_a.name)
+
+		with (
+			patch.object(v1, "_account_read_enabled", return_value=True),
+			patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY),
+			patch.object(v1, "_now_timestamp", return_value=20_000),
+		):
+			cursor = v1.list_repairs_for_current_user(None, 1)["next_cursor"]
+			with patch.object(v1, "SCHEMA_REVISION", 2):
+				wrong_schema_cursor = v1.list_repairs_for_current_user(None, 1)["next_cursor"]
+		self.assertIsNotNone(cursor)
+		payload, signature = cursor.split(".")
+		tampered_signature = ("A" if signature[0] != "A" else "B") + signature[1:]
+		tampered = f"{payload}.{tampered_signature}"
+
+		def assert_invalid(candidate, now):
+			with (
+				patch.object(v1, "_account_read_enabled", return_value=True),
+				patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY),
+				patch.object(v1, "_now_timestamp", return_value=now),
+			):
+				with self.assertRaises(v1.PublicContractError) as caught:
+					v1.list_repairs_for_current_user(candidate, 1)
+			self.assertEqual(caught.exception.code, "INVALID_CURSOR")
+			public_error = repr(caught.exception)
+			for forbidden in (candidate, user_a.name, customer_a.name, customer_b.name):
+				self.assertNotIn(forbidden, public_error)
+
+		assert_invalid(tampered, 20_000)
+		assert_invalid(cursor, 20_000 + v1.CURSOR_TTL_SECONDS + 1)
+		assert_invalid(wrong_schema_cursor, 20_000)
+
+		frappe.set_user(user_b.name)
+		assert_invalid(cursor, 20_000)
+
+		frappe.set_user(user_a.name)
+		_make_customer(user_a)
+		assert_invalid(cursor, 20_000)
 
 	def test_backfill_is_idempotent_and_report_contains_only_counters(self):
 		customer = _make_customer()
