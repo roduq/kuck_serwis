@@ -6,11 +6,15 @@ from pathlib import Path
 
 from kuck_serwis.repair_photo_evidence_store import (
 	EVIDENCE_SQL,
+	FILE_REVALIDATION_SQL,
 	ActorScopedRepairAccess,
 	RepairPhotoEvidenceStoreCode,
 	RepairPhotoEvidenceStoreError,
+	ScopedPrivateFileAccess,
 	_issue_actor_scoped_repair_access,
 	read_scoped_repair_photo_evidence,
+	read_scoped_repair_photo_file_access,
+	revalidate_scoped_repair_photo_file_access,
 )
 from kuck_serwis.repair_photo_metadata import MAX_PHOTOS_PER_REPAIR, ScopedRepairPhotoEvidence
 
@@ -18,6 +22,8 @@ REPAIR_NAME = "NAP-2026-00001"
 REPAIR_ID = "rpr_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 ACTOR = "synthetic@example.test"
 URL = "/private/files/synthetic.png"
+FILE_ID = "G080-FILE"
+FILE_REVISION = "2026-08-15 10:11:12.123456"
 
 
 def access(**overrides):
@@ -27,7 +33,22 @@ def access(**overrides):
 
 
 def meta(*, scoped=1, photos=0, attached=0, orphan=0, isolation="REPEATABLE-READ"):
-	return (isolation, "META", scoped, photos, attached, orphan, None, None, None, None, None)
+	return (
+		isolation,
+		"META",
+		scoped,
+		photos,
+		attached,
+		orphan,
+		None,
+		None,
+		None,
+		None,
+		None,
+		None,
+		None,
+		None,
+	)
 
 
 def photo(
@@ -37,6 +58,9 @@ def photo(
 	url_chars=None,
 	duplicate=0,
 	match_state=1,
+	file_identity=FILE_ID,
+	file_basename=None,
+	file_revision=FILE_REVISION,
 	isolation="REPEATABLE-READ",
 ):
 	return (
@@ -51,6 +75,9 @@ def photo(
 		len(url) if url_chars is None else url_chars,
 		duplicate,
 		match_state,
+		file_identity,
+		url.removeprefix("/private/files/") if file_basename is None else file_basename,
+		file_revision,
 	)
 
 
@@ -85,6 +112,54 @@ class TestRepairPhotoEvidenceStore(unittest.TestCase):
 		self.assertTrue(result[0].is_private)
 		self.assertTrue(result[0].exact_attachment)
 		self.assertTrue(result[0].metadata_only)
+
+	def test_file_capability_is_exact_sealed_frozen_and_redacted(self):
+		result = read_scoped_repair_photo_file_access(access(), reader=lambda **_kwargs: rows(photo()))
+		self.assertEqual(len(result), 1)
+		self.assertIs(type(result[0]), ScopedPrivateFileAccess)
+		self.assertEqual(repr(result[0]), "ScopedPrivateFileAccess(<redacted>)")
+		for marker in (REPAIR_NAME, REPAIR_ID, ACTOR, URL, FILE_ID, FILE_REVISION):
+			self.assertNotIn(marker, repr(result[0]))
+		with self.assertRaises(FrozenInstanceError):
+			result[0].evidence = None
+
+	def test_file_capability_revalidation_requires_exact_current_snapshot(self):
+		proof = read_scoped_repair_photo_file_access(access(), reader=lambda **_kwargs: rows(photo()))[0]
+		revalidate_scoped_repair_photo_file_access(proof, reader=lambda **_kwargs: rows(photo()))
+		for changed in (
+			rows(photo(file_identity="G080-OTHER")),
+			rows(photo(file_revision="2026-08-15 10:11:13.000000")),
+		):
+			self.assert_code(
+				RepairPhotoEvidenceStoreCode.PHOTO_EVIDENCE_UNSAFE,
+				lambda changed=changed: revalidate_scoped_repair_photo_file_access(
+					proof, reader=lambda **_kwargs: changed
+				),
+			)
+		self.assert_code(
+			RepairPhotoEvidenceStoreCode.SCOPED_REPAIR_NOT_FOUND,
+			lambda: revalidate_scoped_repair_photo_file_access(
+				proof, reader=lambda **_kwargs: rows(scoped=0, attached=0)
+			),
+		)
+
+	def test_forged_file_capability_and_nonlocal_binding_fail_closed(self):
+		forged = object.__new__(ScopedPrivateFileAccess)
+		self.assert_code(
+			RepairPhotoEvidenceStoreCode.INVALID_INPUT,
+			lambda: revalidate_scoped_repair_photo_file_access(forged, reader=lambda **_kwargs: rows()),
+		)
+		for item in (
+			photo(file_basename="nested/synthetic.png"),
+			photo(file_basename="other.png"),
+			photo(file_revision=""),
+		):
+			self.assert_code(
+				RepairPhotoEvidenceStoreCode.EVIDENCE_MALFORMED,
+				lambda item=item: read_scoped_repair_photo_file_access(
+					access(), reader=lambda **_kwargs: rows(item)
+				),
+			)
 
 	def test_positions_are_deterministic_and_maximum_count_is_accepted(self):
 		items = tuple(
@@ -337,6 +412,26 @@ class TestRepairPhotoEvidenceStore(unittest.TestCase):
 			"UPDATE ",
 			"DELETE ",
 			"GET_CONTENT",
+		):
+			self.assertNotIn(forbidden, upper)
+
+	def test_revalidation_is_one_bounded_current_read_without_transaction_ownership(self):
+		upper = FILE_REVALIDATION_SQL.upper()
+		self.assertEqual(FILE_REVALIDATION_SQL.count(";"), 0)
+		self.assertIn("LOCK IN SHARE MODE", upper)
+		self.assertEqual(upper.count("%(ROW_LIMIT)S"), 1)
+		self.assertIn("FORCE INDEX (`file_url_index`)", FILE_REVALIDATION_SQL)
+		self.assertIn("FORCE INDEX (`parent`)", FILE_REVALIDATION_SQL)
+		for forbidden in (
+			"START TRANSACTION",
+			"COMMIT",
+			"ROLLBACK",
+			"INSERT ",
+			"UPDATE ",
+			"DELETE ",
+			"GET_CONTENT",
+			"LOAD_FILE",
+			"CONTENT_HASH",
 		):
 			self.assertNotIn(forbidden, upper)
 

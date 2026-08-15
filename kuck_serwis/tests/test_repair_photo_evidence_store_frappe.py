@@ -8,10 +8,14 @@ from frappe.tests import IntegrationTestCase
 
 from kuck_serwis.repair_photo_evidence_store import (
 	EVIDENCE_SQL,
+	FILE_REVALIDATION_SQL,
 	RepairPhotoEvidenceStoreCode,
 	RepairPhotoEvidenceStoreError,
+	ScopedPrivateFileAccess,
 	_issue_actor_scoped_repair_access,
 	read_scoped_repair_photo_evidence,
+	read_scoped_repair_photo_file_access,
+	revalidate_scoped_repair_photo_file_access,
 )
 
 
@@ -71,8 +75,17 @@ def _insert_child(*, repair, name, position, file_url):
 
 
 def _insert_file(
-	*, repair, name, file_url, is_private=1, is_folder=0, attached_to_name=None, attached_to_field="zdjecie"
+	*,
+	repair,
+	name,
+	file_url,
+	file_name=None,
+	is_private=1,
+	is_folder=0,
+	attached_to_name=None,
+	attached_to_field="zdjecie",
 ):
+	file_name = file_url.rsplit("/", 1)[-1] if file_name is None else file_name
 	frappe.db.sql(
 		"""
 		INSERT INTO `tabFile`
@@ -81,10 +94,11 @@ def _insert_file(
 			 `attached_to_name`, `attached_to_field`)
 		VALUES
 			(%s, NOW(6), NOW(6), 'Administrator', 'Administrator', 0, 0,
-			 'synthetic.png', %s, %s, %s, 'Naprawa', %s, %s)
+			 %s, %s, %s, %s, 'Naprawa', %s, %s)
 		""",
 		(
 			name,
+			file_name,
 			is_private,
 			file_url,
 			is_folder,
@@ -129,7 +143,6 @@ class TestRepairPhotoEvidenceStoreFrappe(IntegrationTestCase):
 		owner, _customer, repair = self.fixture()
 		proof = _access(repair, owner)
 		self.assertEqual(read_scoped_repair_photo_evidence(proof), ())
-
 		marker = frappe.generate_hash(length=12)
 		url = f"/private/files/g074-{marker}.png"
 		savepoint = f"g074_{marker}"
@@ -144,6 +157,205 @@ class TestRepairPhotoEvidenceStoreFrappe(IntegrationTestCase):
 		finally:
 			frappe.db.rollback(save_point=savepoint)
 		self.assertEqual(read_scoped_repair_photo_evidence(proof), ())
+
+	def test_exact_file_capability_and_post_read_style_revalidation(self):
+		owner, _customer, repair = self.fixture()
+		proof = _access(repair, owner)
+		marker = frappe.generate_hash(length=12)
+		url = f"/private/files/g080-{marker}.png"
+		file_id = f"G080-FILE-{marker}"
+		savepoint = f"g080_binding_{marker}"
+		frappe.db.savepoint(savepoint)
+		try:
+			_insert_child(repair=repair, name=f"G080-ROW-{marker}", position=1, file_url=url)
+			_insert_file(repair=repair, name=file_id, file_url=url)
+			result = read_scoped_repair_photo_file_access(proof)
+			self.assertEqual(len(result), 1)
+			self.assertIs(type(result[0]), ScopedPrivateFileAccess)
+			self.assertEqual(result[0]._file_identity, file_id)
+			self.assertEqual(result[0]._file_basename, f"g080-{marker}.png")
+			self.assertEqual(result[0]._file_url, url)
+			self.assertTrue(result[0]._file_revision)
+			for secret in (repair.name, repair.public_id, owner.name, file_id, url):
+				self.assertNotIn(secret, repr(result[0]))
+			revalidate_scoped_repair_photo_file_access(result[0])
+			frappe.db.set_value("File", file_id, "attached_to_field", "other_field", update_modified=True)
+			self.assert_code(
+				RepairPhotoEvidenceStoreCode.PHOTO_EVIDENCE_UNSAFE,
+				lambda: revalidate_scoped_repair_photo_file_access(result[0]),
+			)
+		finally:
+			frappe.db.rollback(save_point=savepoint)
+
+	def test_revalidation_is_one_real_current_locking_read_with_bounded_plan(self):
+		owner, _customer, repair = self.fixture()
+		marker = frappe.generate_hash(length=12)
+		url = f"/private/files/g080-plan-{marker}.png"
+		file_id = f"G080-PLAN-{marker}"
+		savepoint = f"g080_plan_{marker}"
+		frappe.db.savepoint(savepoint)
+		try:
+			_insert_child(repair=repair, name=f"G080-PLAN-ROW-{marker}", position=1, file_url=url)
+			_insert_file(repair=repair, name=file_id, file_url=url)
+			proof = read_scoped_repair_photo_file_access(_access(repair, owner))[0]
+			values = {
+				"repair_name": repair.name,
+				"repair_id": repair.public_id,
+				"actor_identity": owner.name,
+				"row_limit": 401,
+			}
+			plan_rows = frappe.db.sql("EXPLAIN FORMAT=JSON " + FILE_REVALIDATION_SQL, values)
+			self.assertEqual(len(plan_rows), 1)
+			plan = json.loads(plan_rows[0][0])
+			tables = [node["table"] for node in _walk(plan) if type(node.get("table")) is dict]
+			self.assertTrue(any(node.get("key") == "parent" for node in tables))
+			self.assertTrue(any(node.get("key") == "file_url_index" for node in tables))
+
+			real_sql = frappe.db.sql
+			calls = []
+
+			def sql_spy(query, params=None, *args, **kwargs):
+				calls.append((query, params, args, kwargs))
+				return real_sql(query, params, *args, **kwargs)
+
+			with (
+				patch.object(frappe.db, "sql", side_effect=sql_spy),
+				patch.object(frappe.db, "commit", side_effect=AssertionError("COMMIT_FORBIDDEN")),
+				patch.object(frappe.db, "rollback", side_effect=AssertionError("ROLLBACK_FORBIDDEN")),
+				patch.object(File, "get_content", side_effect=AssertionError("CONTENT_FORBIDDEN")),
+				patch("builtins.open", side_effect=AssertionError("FILESYSTEM_FORBIDDEN")),
+			):
+				revalidate_scoped_repair_photo_file_access(proof)
+			self.assertEqual(calls, [(FILE_REVALIDATION_SQL, values, (), {})])
+		finally:
+			frappe.db.rollback(save_point=savepoint)
+
+	def test_current_revalidation_rejects_orphan_duplicate_position_and_overflow(self):
+		owner, _customer, repair = self.fixture()
+		proof = _access(repair, owner)
+		marker = frappe.generate_hash(length=10)
+		savepoint = f"g080_current_{marker}"
+		for mutation in ("orphan", "duplicate_position", "overflow"):
+			frappe.db.savepoint(savepoint)
+			try:
+				url = f"/private/files/g080-current-{mutation}-{marker}.png"
+				_insert_child(
+					repair=repair,
+					name=f"G080-CURRENT-ROW-{mutation}-{marker}",
+					position=1,
+					file_url=url,
+				)
+				_insert_file(
+					repair=repair,
+					name=f"G080-CURRENT-FILE-{mutation}-{marker}",
+					file_url=url,
+				)
+				capability = read_scoped_repair_photo_file_access(proof)[0]
+				if mutation == "orphan":
+					orphan_url = f"/private/files/g080-orphan-{marker}.png"
+					_insert_file(repair=repair, name=f"G080-ORPHAN-{marker}", file_url=orphan_url)
+				elif mutation == "duplicate_position":
+					other_url = f"/private/files/g080-position-{marker}.png"
+					_insert_child(
+						repair=repair,
+						name=f"G080-POSITION-ROW-{marker}",
+						position=1,
+						file_url=other_url,
+					)
+					_insert_file(
+						repair=repair,
+						name=f"G080-POSITION-FILE-{marker}",
+						file_url=other_url,
+					)
+				else:
+					for position in range(2, 22):
+						extra_url = f"/private/files/g080-overflow-{position}-{marker}.png"
+						_insert_child(
+							repair=repair,
+							name=f"G080-OVERFLOW-ROW-{position}-{marker}",
+							position=position,
+							file_url=extra_url,
+						)
+						_insert_file(
+							repair=repair,
+							name=f"G080-OVERFLOW-FILE-{position}-{marker}",
+							file_url=extra_url,
+						)
+				self.assert_code(
+					RepairPhotoEvidenceStoreCode.PHOTO_EVIDENCE_UNSAFE,
+					lambda: revalidate_scoped_repair_photo_file_access(capability),
+				)
+			finally:
+				frappe.db.rollback(save_point=savepoint)
+
+	def test_locking_revalidation_fails_closed_on_change_hidden_from_rr_snapshot(self):
+		"""Prove stale RR evidence is not accepted; commits are fixture-only and cleaned."""
+
+		owner = customer = repair = None
+		file_id = child_id = None
+		try:
+			with self.primary_connection():
+				owner, customer, repair = self.fixture()
+				marker = frappe.generate_hash(length=12)
+				url = f"/private/files/g080-rr-{marker}.png"
+				file_id = f"G080-RR-FILE-{marker}"
+				child_id = f"G080-RR-ROW-{marker}"
+				_insert_child(repair=repair, name=child_id, position=1, file_url=url)
+				_insert_file(repair=repair, name=file_id, file_url=url)
+				frappe.db.commit()  # test-only visibility boundary for the second connection
+				proof = _access(repair, owner)
+				capability = read_scoped_repair_photo_file_access(proof)[0]
+
+			with self.secondary_connection():
+				frappe.db.sql(
+					"UPDATE `tabFile` SET `attached_to_field` = 'other_field', "
+					"`modified` = NOW(6) WHERE `name` = %s",
+					(file_id,),
+				)
+				frappe.db.commit()  # test-only concurrent committed mutation
+
+			with self.primary_connection():
+				# The original consistent RR snapshot remains stale by design.
+				stale = read_scoped_repair_photo_file_access(proof)
+				self.assertEqual(stale, (capability,))
+				real_sql = frappe.db.sql
+				internal_codes = []
+
+				def diagnostic_spy(*args, **kwargs):
+					try:
+						return real_sql(*args, **kwargs)
+					except Exception as error:
+						first = error.args[0] if error.args else None
+						if type(first) is tuple and first:
+							internal_codes.append(first[0])
+						elif isinstance(first, BaseException) and first.args:
+							internal_codes.append(first.args[0])
+						raise
+
+				with patch.object(frappe.db, "sql", side_effect=diagnostic_spy):
+					# MariaDB rejects the changed RR record with internal 1020; the
+					# production boundary sanitizes it and never accepts stale evidence.
+					self.assert_code(
+						RepairPhotoEvidenceStoreCode.EVIDENCE_READ_FAILED,
+						lambda: revalidate_scoped_repair_photo_file_access(capability),
+					)
+				self.assertEqual(internal_codes, [1020])
+		finally:
+			with self.primary_connection():
+				frappe.db.rollback()
+				if file_id is not None:
+					frappe.db.sql("DELETE FROM `tabFile` WHERE `name` = %s", (file_id,))
+				if child_id is not None:
+					frappe.db.sql("DELETE FROM `tabNaprawa Zdjecie` WHERE `name` = %s", (child_id,))
+				if repair is not None:
+					frappe.db.sql("DELETE FROM `tabNaprawa` WHERE `name` = %s", (repair.name,))
+				if customer is not None:
+					frappe.db.sql("DELETE FROM `tabPortal User` WHERE `parent` = %s", (customer.name,))
+					frappe.db.sql("DELETE FROM `tabCustomer` WHERE `name` = %s", (customer.name,))
+				if owner is not None:
+					frappe.db.sql("DELETE FROM `tabHas Role` WHERE `parent` = %s", (owner.name,))
+					frappe.db.sql("DELETE FROM `tabUser` WHERE `name` = %s", (owner.name,))
+				frappe.db.commit()  # test-only recoverable cleanup boundary
 
 	def test_a_b_idor_revocation_system_user_and_missing_are_identical(self):
 		owner, customer, repair = self.fixture()
