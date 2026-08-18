@@ -11,6 +11,11 @@ from kuck_serwis.repair_photo_inventory import (
 	RepairPhotoInventoryStatus,
 	collect_repair_photo_inventory,
 )
+from kuck_serwis.repair_photo_retention_preflight import (
+	RepairPhotoRetentionPreflightCode,
+	assess_repair_photo_retention_inventory_v1,
+	collect_repair_photo_retention_preflight_v1,
+)
 
 
 def _insert_child(*, name, parent, file_url):
@@ -121,6 +126,23 @@ class TestRepairPhotoInventoryFrappe(IntegrationTestCase):
 				after.counters.orphan_public_file_rows,
 				before.counters.orphan_public_file_rows + 1,
 			)
+			preflight = assess_repair_photo_retention_inventory_v1(after)
+			self.assertIn(
+				RepairPhotoRetentionPreflightCode.PUBLIC_OR_MALFORMED_REFERENCE_PRESENT,
+				preflight.codes,
+			)
+			self.assertIn(
+				RepairPhotoRetentionPreflightCode.PRIVATE_BINDING_NOT_PROVEN,
+				preflight.codes,
+			)
+			self.assertIn(
+				RepairPhotoRetentionPreflightCode.DUPLICATE_REFERENCE_PRESENT,
+				preflight.codes,
+			)
+			self.assertIn(RepairPhotoRetentionPreflightCode.ORPHAN_FILE_PRESENT, preflight.codes)
+			self.assertFalse(preflight.retention_evidence_ok)
+			self.assertFalse(preflight.purge_authorized)
+			self.assertFalse(preflight.download_authorized)
 		finally:
 			frappe.db.rollback(save_point=savepoint)
 
@@ -158,6 +180,36 @@ class TestRepairPhotoInventoryFrappe(IntegrationTestCase):
 		upper = query.upper()
 		for forbidden in ("START TRANSACTION", "COMMIT", "ROLLBACK", "FOR UPDATE", "GET_CONTENT"):
 			self.assertNotIn(forbidden, upper)
+
+	def test_preflight_delegates_to_one_fresh_read_without_content_or_transaction_io(self):
+		real_sql = frappe.db.sql
+		calls = []
+
+		def sql_spy(query, values=None, *args, **kwargs):
+			calls.append((query, values, args, kwargs))
+			return real_sql(query, values, *args, **kwargs)
+
+		with (
+			patch.object(frappe.db, "sql", side_effect=sql_spy),
+			patch.object(frappe.db, "begin", side_effect=AssertionError("BEGIN_FORBIDDEN")),
+			patch.object(frappe.db, "commit", side_effect=AssertionError("COMMIT_FORBIDDEN")),
+			patch.object(frappe.db, "rollback", side_effect=AssertionError("ROLLBACK_FORBIDDEN")),
+			patch.object(File, "get_content", side_effect=AssertionError("CONTENT_FORBIDDEN")),
+			patch("builtins.open", side_effect=AssertionError("FILESYSTEM_FORBIDDEN")),
+		):
+			result = collect_repair_photo_retention_preflight_v1(
+				limits=RepairPhotoInventoryLimits(child_rows_per_source=10, file_rows=10)
+			)
+
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(calls[0][0], INVENTORY_SQL)
+		self.assertFalse(result.retention_evidence_ok)
+		self.assertFalse(result.assessment_authorized)
+		self.assertFalse(result.dry_run_authorized)
+		self.assertFalse(result.purge_authorized)
+		self.assertFalse(result.download_authorized)
+		self.assertFalse(result.activation_authorized)
+		self.assertFalse(result.capability_ready)
 
 	def test_real_indexes_and_explain_preserve_bounded_plan_contract(self):
 		index_rows = frappe.db.sql(

@@ -28,6 +28,7 @@ _PURE_MODULES = (
 	"kuck_serwis.tests.test_repair_photo_metadata",
 	"kuck_serwis.tests.test_repair_photo_policy",
 	"kuck_serwis.tests.test_repair_photo_retention",
+	"kuck_serwis.tests.test_repair_photo_retention_preflight",
 	"kuck_serwis.tests.test_repair_photo_storage",
 )
 

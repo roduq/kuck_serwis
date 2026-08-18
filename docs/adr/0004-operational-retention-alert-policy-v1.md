@@ -182,6 +182,29 @@ Komplet może dać `policy_ready=true`, ale nigdy nie daje zgody na purge,
 delivery ani activation. Digest mismatch jest błędem code-only, a nie zwykłą
 brakującą bramką.
 
+## Dark preflight istniejącego inventory zdjęć
+
+`repair_photo_retention_preflight.py` składa istniejący, bounded i count-only
+`RepairPhotoInventoryReport` w code-only dowód częściowy. Nie wykonuje nowego
+zapytania: collector deleguje dokładnie jeden świeży odczyt do
+`collect_repair_photo_inventory()`, z jego istniejącymi limitami i kontrolą
+izolacji. Nie używa cache ani zapisanego wcześniej sukcesu.
+
+Kompletny inventory bez publicznych lub malformed referencji, niepoprawnych
+child identities, luk private File binding, duplikatów i orphan File może dać
+`inventory_evidence_ok=true`. Jedynym kodem takiego wyniku jest
+`EXISTING_INVENTORY_PARTIAL_EVIDENCE`: nadal nie dowodzi lifecycle anchor,
+blob cardinality, legal hold, zatwierdzenia polityki ani gotowości purge.
+
+Truncation, błąd odczytu, unsafe isolation, malformed wynik lub wyjątek są
+fail-closed. Wynik nie zawiera identyfikatorów napraw, File, URL, Customer/User,
+SQL ani tekstu wyjątku. Wszystkie pola `retention_evidence_ok`, assessment,
+dry-run, purge, download, activation i capability pozostają literalnie false.
+
+Preflight jest prywatnym diagnostycznym odczytem, nie publicznym endpointem.
+Nie emituje audit eventu, ponieważ w tym pionie nie ma operacji dostępu ani
+zapisu. Przyszły scheduler i code-only telemetry wymagają osobnego zadania.
+
 ## Nadal otwarte przed runtime
 
 - exact User IDs i adresy primary/escalation;
@@ -197,12 +220,15 @@ brakującą bramką.
 Brak powyższych danych nie zmienia wartości polityki, ale utrzymuje odpowiednie
 evidence jako false i wszystkie capability wyłączone.
 
-## Granice wdrożonego slice
+## Granice wdrożonych dark slice'ów
 
-W tym zadaniu wolno dodać wyłącznie ten ADR, pure moduł oraz jego testy. Zakazane
-są zmiany `hooks.py`, DocType, patches, `install.py`, schema, site, scheduler,
-mail, metrics backend, backup/restore, purge i `_AUDIT_AND_MONITORING_READY`.
+Wdrożone są pure policy/plannery oraz read-only inventory preflight. Zakazane
+pozostają zmiany `hooks.py`, DocType, patches, `install.py`, schema, site,
+scheduler, mail, metrics backend, backup/restore, purge,
+`_AUDIT_AND_MONITORING_READY` i photo public capability.
 
-Testy muszą potwierdzić exact digest, okresy, progi i granice, fail-closed hold,
-minimum dwóch odbiorców, stable ordering/kody, redacted DTO, brak PII fields,
-brak importu Frappe/I/O oraz bezwarunkowo fałszywe flagi wykonawcze.
+Testy potwierdzają exact digest, okresy, progi i granice, fail-closed hold,
+minimum dwóch odbiorców, stable ordering/kody, redacted DTO, brak PII fields
+oraz bezwarunkowo fałszywe flagi wykonawcze. Preflight dodatkowo testuje pełne
+mapowanie istniejących counters, canonical code order, truncation, błędy
+collectora i brak jakiegokolwiek uprawnienia wykonawczego.
