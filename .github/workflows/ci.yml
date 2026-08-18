@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  merge_group:
+  pull_request:
+  push:
+    branches:
+      - version-16
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  pure:
+    name: ci/pure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+          check-latest: false
+
+      - name: Install exact pure dependency
+        run: python -m pip install --no-input Pillow==12.2.0
+
+      - name: Compile application sources
+        run: python -m compileall -q kuck_serwis
+
+      - name: Run hermetic pure suite
+        run: >-
+          python -m unittest
+          kuck_serwis.tests.test_audit_passive_db_preflight
+          kuck_serwis.tests.test_audit_passive_probe
+          kuck_serwis.tests.test_audit_probe_evidence
+          kuck_serwis.tests.test_audit_readiness
+          kuck_serwis.tests.test_ci_contract
+          kuck_serwis.tests.test_contact_update
+          kuck_serwis.tests.test_operational_policy_v1
+          kuck_serwis.tests.test_repair_photo_content
+          kuck_serwis.tests.test_repair_photo_decode_process
+          kuck_serwis.tests.test_repair_photo_evidence_store
+          kuck_serwis.tests.test_repair_photo_inventory
+          kuck_serwis.tests.test_repair_photo_metadata
+          kuck_serwis.tests.test_repair_photo_policy
+          kuck_serwis.tests.test_repair_photo_retention
+          kuck_serwis.tests.test_repair_photo_storage
+
+  fullstack-blocked:
+    name: ci/frappe-fullstack (BLOCKED)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Report protected dependency blocker
+        run: |
+          echo 'BLOCKED: PRIVATE_CROSS_REPO_CREDENTIAL_UNAVAILABLE'
+          echo 'No Frappe site, migration, or full-stack test was attempted.'
+          exit 1

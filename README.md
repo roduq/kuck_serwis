@@ -77,6 +77,19 @@ Pre-commit is configured to use the following tools for checking and formatting 
 - prettier
 - pyupgrade
 
+Pushes and pull requests targeting `version-16` also run two least-privilege
+GitHub Actions checks:
+
+- `ci/lint` runs the repository's pre-commit hooks on the exact candidate delta
+  using Python 3.14.6;
+- `ci/pure` compiles the application and runs the 15 framework-independent test
+  modules with the Pillow version required by the pinned Frappe v16 release.
+
+The remote workflow deliberately does not claim Frappe, MariaDB, migration, or
+site integration coverage. Those tests require the protected six-application
+bench and are run through `bench --site <site> run-tests --app kuck_serwis` in
+the controlled integration environment.
+
 ### License
 
 mit
