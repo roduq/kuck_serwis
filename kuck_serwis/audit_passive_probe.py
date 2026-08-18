@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Final
 
+from kuck_serwis.operational_policy_v1 import POLICY_REVISION_SHA256, build_operational_policy_v1
+
 _CANONICAL_UTC_RE: Final = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 
 
@@ -33,6 +35,7 @@ class PassiveProbeCode(StrEnum):
 
 class PassiveProbeErrorCode(StrEnum):
 	INVALID_OBSERVATIONS = "INVALID_OBSERVATIONS"
+	INVALID_ASSESSMENT = "INVALID_ASSESSMENT"
 	INVALID_CHECKED_AT = "INVALID_CHECKED_AT"
 	INVALID_RESULT = "INVALID_RESULT"
 
@@ -96,6 +99,68 @@ class PassiveProbeAssessment:
 		return f"PassiveProbeAssessment(ok={self.ok!r}, code={self.code.value!r}, <redacted>)"
 
 
+class PassiveProbeFreshnessCode(StrEnum):
+	FRESH = "FRESH"
+	MISSING = "MISSING"
+	FAILED = "FAILED"
+	FUTURE = "FUTURE"
+	STALE = "STALE"
+
+
+_ALLOWED_FRESHNESS_FAILURE_CODES: Final = frozenset(
+	{
+		(PassiveProbeFreshnessCode.MISSING,),
+		(PassiveProbeFreshnessCode.FAILED,),
+		(PassiveProbeFreshnessCode.FUTURE,),
+		(PassiveProbeFreshnessCode.STALE,),
+		(PassiveProbeFreshnessCode.FAILED, PassiveProbeFreshnessCode.FUTURE),
+		(PassiveProbeFreshnessCode.FAILED, PassiveProbeFreshnessCode.STALE),
+	}
+)
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class PassiveProbeFreshnessPlan:
+	"""Freshness-only decision which cannot assert operational readiness."""
+
+	fresh: bool
+	codes: tuple[PassiveProbeFreshnessCode, ...]
+	policy_revision_sha256: str = field(repr=False)
+	purge_authorized: bool = False
+	delivery_authorized: bool = False
+	activation_authorized: bool = False
+	capability_ready: bool = False
+	readiness_evidence_ok: bool = False
+
+	def __post_init__(self) -> None:
+		if (
+			type(self.fresh) is not bool
+			or type(self.codes) is not tuple
+			or not self.codes
+			or any(type(code) is not PassiveProbeFreshnessCode for code in self.codes)
+			or type(self.policy_revision_sha256) is not str
+			or self.policy_revision_sha256 != POLICY_REVISION_SHA256
+			or self.purge_authorized is not False
+			or self.delivery_authorized is not False
+			or self.activation_authorized is not False
+			or self.capability_ready is not False
+			or self.readiness_evidence_ok is not False
+		):
+			_fail(PassiveProbeErrorCode.INVALID_RESULT)
+		if self.fresh:
+			if self.codes != (PassiveProbeFreshnessCode.FRESH,):
+				_fail(PassiveProbeErrorCode.INVALID_RESULT)
+		elif self.codes not in _ALLOWED_FRESHNESS_FAILURE_CODES:
+			_fail(PassiveProbeErrorCode.INVALID_RESULT)
+		canonical = tuple(code for code in PassiveProbeFreshnessCode if code in self.codes)
+		if self.codes != canonical:
+			_fail(PassiveProbeErrorCode.INVALID_RESULT)
+
+	def __repr__(self) -> str:
+		codes = tuple(code.value for code in self.codes)
+		return f"PassiveProbeFreshnessPlan(fresh={self.fresh!r}, codes={codes!r}, <redacted>)"
+
+
 _OBSERVATION_FIELDS: Final = (
 	"connection_available",
 	"schema_matches",
@@ -134,6 +199,41 @@ def plan_passive_probe(
 	return PassiveProbeAssessment(True, canonical_checked_at, PassiveProbeCode.PASSIVE_OK)
 
 
+def plan_passive_probe_freshness_v1(
+	assessment: PassiveProbeAssessment | None,
+	*,
+	checked_at: str,
+) -> PassiveProbeFreshnessPlan:
+	"""Assess one passive result against the exact operational policy v1 limit."""
+
+	assessed_at = _parse_canonical_utc_datetime(checked_at, PassiveProbeErrorCode.INVALID_CHECKED_AT)
+	policy = build_operational_policy_v1()
+	if assessment is None:
+		return _freshness_plan(False, (PassiveProbeFreshnessCode.MISSING,), policy.policy_revision_sha256)
+
+	validated = _rebuild_assessment(assessment)
+	probe_checked_at = _parse_canonical_utc_datetime(
+		validated.checked_at,
+		PassiveProbeErrorCode.INVALID_ASSESSMENT,
+	)
+	age_seconds = int((assessed_at - probe_checked_at).total_seconds())
+	failures: set[PassiveProbeFreshnessCode] = set()
+	if not validated.ok or validated.code is not PassiveProbeCode.PASSIVE_OK:
+		failures.add(PassiveProbeFreshnessCode.FAILED)
+	if age_seconds < 0:
+		failures.add(PassiveProbeFreshnessCode.FUTURE)
+	elif age_seconds > policy.alert_thresholds.passive_probe_fresh_seconds:
+		failures.add(PassiveProbeFreshnessCode.STALE)
+	if failures:
+		codes = tuple(code for code in PassiveProbeFreshnessCode if code in failures)
+		return _freshness_plan(False, codes, policy.policy_revision_sha256)
+	return _freshness_plan(
+		True,
+		(PassiveProbeFreshnessCode.FRESH,),
+		policy.policy_revision_sha256,
+	)
+
+
 def _rebuild_observations(value: object) -> PassiveProbeObservations:
 	if type(value) is not PassiveProbeObservations:
 		_fail(PassiveProbeErrorCode.INVALID_OBSERVATIONS)
@@ -154,7 +254,35 @@ def _rebuild_observations(value: object) -> PassiveProbeObservations:
 		_fail(PassiveProbeErrorCode.INVALID_OBSERVATIONS)
 
 
+def _rebuild_assessment(value: object) -> PassiveProbeAssessment:
+	if type(value) is not PassiveProbeAssessment:
+		_fail(PassiveProbeErrorCode.INVALID_ASSESSMENT)
+	try:
+		return PassiveProbeAssessment(ok=value.ok, checked_at=value.checked_at, code=value.code)
+	except PassiveProbeError:
+		_fail(PassiveProbeErrorCode.INVALID_ASSESSMENT)
+	except (AttributeError, TypeError, ValueError):
+		_fail(PassiveProbeErrorCode.INVALID_ASSESSMENT)
+
+
+def _freshness_plan(
+	fresh: bool,
+	codes: tuple[PassiveProbeFreshnessCode, ...],
+	policy_revision_sha256: str,
+) -> PassiveProbeFreshnessPlan:
+	return PassiveProbeFreshnessPlan(
+		fresh=fresh,
+		codes=codes,
+		policy_revision_sha256=policy_revision_sha256,
+	)
+
+
 def _parse_canonical_utc(value: object, code: PassiveProbeErrorCode) -> str:
+	_parse_canonical_utc_datetime(value, code)
+	return value
+
+
+def _parse_canonical_utc_datetime(value: object, code: PassiveProbeErrorCode) -> datetime:
 	if type(value) is not str or _CANONICAL_UTC_RE.fullmatch(value) is None:
 		_fail(code)
 	try:
@@ -163,7 +291,7 @@ def _parse_canonical_utc(value: object, code: PassiveProbeErrorCode) -> str:
 		_fail(code)
 	if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
 		_fail(code)
-	return value
+	return parsed
 
 
 def _fail(code: PassiveProbeErrorCode) -> None:

@@ -10,9 +10,13 @@ from kuck_serwis.audit_passive_probe import (
 	PassiveProbeCode,
 	PassiveProbeError,
 	PassiveProbeErrorCode,
+	PassiveProbeFreshnessCode,
+	PassiveProbeFreshnessPlan,
 	PassiveProbeObservations,
 	plan_passive_probe,
+	plan_passive_probe_freshness_v1,
 )
+from kuck_serwis.operational_policy_v1 import POLICY_REVISION_SHA256
 
 CHECKED_AT = "2026-08-15T12:34:56Z"
 
@@ -278,6 +282,164 @@ class TestPassiveProbePlanner(unittest.TestCase):
 				{"now", "utcnow", "connect", "commit", "rollback", "enqueue", "get_conf", "get_hooks"}
 			)
 		)
+
+
+class TestPassiveProbeFreshnessPlanner(unittest.TestCase):
+	def assert_code(self, code, call):
+		with self.assertRaises(PassiveProbeError) as raised:
+			call()
+		self.assertIs(raised.exception.code, code)
+		self.assertEqual(str(raised.exception), code.value)
+
+	def plan(self, assessment, checked_at="2026-08-15T12:34:56Z"):
+		return plan_passive_probe_freshness_v1(assessment, checked_at=checked_at)
+
+	def assert_fail_codes(self, assessment, *codes, checked_at="2026-08-15T12:34:56Z"):
+		result = self.plan(assessment, checked_at)
+		self.assertFalse(result.fresh)
+		self.assertEqual(result.codes, codes)
+		return result
+
+	def test_only_passive_ok_from_zero_through_120_seconds_is_fresh(self):
+		for probe_time in ("2026-08-15T12:34:56Z", "2026-08-15T12:32:56Z"):
+			with self.subTest(probe_time=probe_time):
+				result = self.plan(PassiveProbeAssessment(True, probe_time, PassiveProbeCode.PASSIVE_OK))
+				self.assertTrue(result.fresh)
+				self.assertEqual(result.codes, (PassiveProbeFreshnessCode.FRESH,))
+				self.assertEqual(result.policy_revision_sha256, POLICY_REVISION_SHA256)
+
+	def test_121_seconds_is_stale(self):
+		self.assert_fail_codes(
+			PassiveProbeAssessment(True, "2026-08-15T12:32:55Z", PassiveProbeCode.PASSIVE_OK),
+			PassiveProbeFreshnessCode.STALE,
+		)
+
+	def test_missing_assessment_fails_closed(self):
+		self.assert_fail_codes(None, PassiveProbeFreshnessCode.MISSING)
+
+	def test_failed_assessment_is_never_fresh_and_keeps_time_failures(self):
+		cases = (
+			("2026-08-15T12:34:56Z", (PassiveProbeFreshnessCode.FAILED,)),
+			(
+				"2026-08-15T12:34:57Z",
+				(PassiveProbeFreshnessCode.FAILED, PassiveProbeFreshnessCode.FUTURE),
+			),
+			(
+				"2026-08-15T12:32:55Z",
+				(PassiveProbeFreshnessCode.FAILED, PassiveProbeFreshnessCode.STALE),
+			),
+		)
+		for probe_time, expected in cases:
+			with self.subTest(probe_time=probe_time):
+				self.assert_fail_codes(
+					PassiveProbeAssessment(
+						False,
+						probe_time,
+						PassiveProbeCode.PASSIVE_CONNECTION_UNAVAILABLE,
+					),
+					*expected,
+				)
+
+	def test_success_from_the_future_fails_closed(self):
+		self.assert_fail_codes(
+			PassiveProbeAssessment(True, "2026-08-15T12:34:57Z", PassiveProbeCode.PASSIVE_OK),
+			PassiveProbeFreshnessCode.FUTURE,
+		)
+
+	def test_assessment_requires_exact_type_and_is_defensively_rebuilt(self):
+		class AssessmentSubclass(PassiveProbeAssessment):
+			pass
+
+		for invalid in ({}, object(), AssessmentSubclass(True, CHECKED_AT, PassiveProbeCode.PASSIVE_OK)):
+			with self.subTest(value_type=type(invalid).__name__):
+				self.assert_code(
+					PassiveProbeErrorCode.INVALID_ASSESSMENT,
+					lambda invalid=invalid: self.plan(invalid),
+				)
+
+		forged = object.__new__(PassiveProbeAssessment)
+		object.__setattr__(forged, "ok", True)
+		object.__setattr__(forged, "checked_at", CHECKED_AT)
+		object.__setattr__(forged, "code", "PASSIVE_OK")
+		self.assert_code(PassiveProbeErrorCode.INVALID_ASSESSMENT, lambda: self.plan(forged))
+
+	def test_evaluation_time_requires_exact_canonical_utc(self):
+		assessment = PassiveProbeAssessment(True, CHECKED_AT, PassiveProbeCode.PASSIVE_OK)
+		for invalid in ("2026-08-15T12:34:56+00:00", "2026-02-30T12:34:56Z", 1, None):
+			with self.subTest(invalid=invalid):
+				self.assert_code(
+					PassiveProbeErrorCode.INVALID_CHECKED_AT,
+					lambda invalid=invalid: self.plan(assessment, invalid),
+				)
+
+	def test_result_is_frozen_redacted_code_only_and_never_authorizes_operations(self):
+		result = self.plan(PassiveProbeAssessment(True, CHECKED_AT, PassiveProbeCode.PASSIVE_OK))
+		with self.assertRaises(dataclasses.FrozenInstanceError):
+			result.fresh = False
+		self.assertFalse(hasattr(result, "__dict__"))
+		self.assertNotIn(CHECKED_AT, repr(result))
+		for field_name in (
+			"purge_authorized",
+			"delivery_authorized",
+			"activation_authorized",
+			"capability_ready",
+			"readiness_evidence_ok",
+		):
+			self.assertIs(getattr(result, field_name), False)
+		self.assertTrue(
+			{field.name for field in fields(PassiveProbeFreshnessPlan)}.isdisjoint(
+				{"email", "user", "customer", "repair_id", "file_id", "hold_id", "hostname", "url"}
+			)
+		)
+
+	def test_direct_result_rejects_inconsistent_flags_codes_and_digest(self):
+		class DigestSubclass(str):
+			pass
+
+		invalid = (
+			(True, (PassiveProbeFreshnessCode.STALE,), POLICY_REVISION_SHA256, {}),
+			(False, (PassiveProbeFreshnessCode.FRESH,), POLICY_REVISION_SHA256, {}),
+			(False, (), POLICY_REVISION_SHA256, {}),
+			(
+				False,
+				(PassiveProbeFreshnessCode.MISSING, PassiveProbeFreshnessCode.FAILED),
+				POLICY_REVISION_SHA256,
+				{},
+			),
+			(
+				False,
+				(PassiveProbeFreshnessCode.FUTURE, PassiveProbeFreshnessCode.STALE),
+				POLICY_REVISION_SHA256,
+				{},
+			),
+			(
+				False,
+				(PassiveProbeFreshnessCode.STALE, PassiveProbeFreshnessCode.FAILED),
+				POLICY_REVISION_SHA256,
+				{},
+			),
+			(True, (PassiveProbeFreshnessCode.FRESH,), "0" * 64, {}),
+			(True, (PassiveProbeFreshnessCode.FRESH,), 1, {}),
+			(True, (PassiveProbeFreshnessCode.FRESH,), DigestSubclass(POLICY_REVISION_SHA256), {}),
+			(True, (PassiveProbeFreshnessCode.FRESH,), POLICY_REVISION_SHA256, {"capability_ready": True}),
+			(
+				True,
+				(PassiveProbeFreshnessCode.FRESH,),
+				POLICY_REVISION_SHA256,
+				{"readiness_evidence_ok": True},
+			),
+		)
+		for fresh, codes, digest, flags in invalid:
+			with self.subTest(fresh=fresh, codes=codes, flags=flags):
+				self.assert_code(
+					PassiveProbeErrorCode.INVALID_RESULT,
+					lambda fresh=fresh, codes=codes, digest=digest, flags=flags: PassiveProbeFreshnessPlan(
+						fresh,
+						codes,
+						digest,
+						**flags,
+					),
+				)
 
 
 if __name__ == "__main__":

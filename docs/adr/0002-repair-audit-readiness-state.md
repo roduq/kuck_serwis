@@ -296,6 +296,14 @@ porażka ustawia odpowiednią bramkę false, nawet jeżeli alert ma jeszcze pozi
 warning. Wynik zawiera jeden najbardziej pierwotny kod według stałej kolejności;
 pełne liczniki są code-only telemetry, nie payloadem wiersza.
 
+Pure `plan_passive_probe_freshness_v1()` wiąże punktowy wynik z exact progiem
+`120 s` oraz digestem zaakceptowanej polityki v1 z ADR 0004. Wyłącznie
+`PASSIVE_OK` o wieku `0..120 s` daje `FRESH`; brak wyniku, porażka, czas z
+przyszłości albo wiek `>120 s` są fail-closed. Plan nie czyta zegara ani runtime,
+nie ustawia żadnej z ośmiu bramek i ma wszystkie flagi purge, delivery,
+activation, capability oraz readiness literalnie false. Collector, trwałość,
+alert streak i kompozycja pełnego readiness nadal nie istnieją.
+
 ## Exact odczyt w `_is_ready()`
 
 Przyszła implementacja zachowuje `_account_read_enabled()` jako nadrzędną bramkę
@@ -467,7 +475,9 @@ Używają syntetycznych danych i odrębnego site.
     wersja daje false.
 29. `emit=True` bez jednego identycznego wiersza na nowym połączeniu nie zapisuje
     active success.
-30. Active wiek 600 s przechodzi, 601 s nie; passive 120 s przechodzi, 121 s nie.
+30. Active wiek 600 s przechodzi, 601 s nie; pure passive freshness plan związany
+    z exact policy v1 przyjmuje wyłącznie `PASSIVE_OK` w wieku `0..120 s`, a brak,
+    failure, przyszłość i wiek 121 s odrzuca bez ustawiania readiness.
 31. Pierwsza porażka active/passive zapisuje false mimo warning severity alertu.
 32. Scheduler disabled, dormant/skipped enqueue, queue outage i crash workera nie
     zachowują READY po expiry.
