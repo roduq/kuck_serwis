@@ -154,7 +154,7 @@ jobs:
             --db-password test_kuck_serwis \
             --admin-password ci_only_admin \
             --no-mariadb-socket
-          site_encryption_key="$(python -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii"))')"
+          site_encryption_key="$(python -c 'import base64, secrets; print(base64.b64encode(secrets.token_bytes(32)).decode("ascii"))')"
           bench --site test_site set-config encryption_key "$site_encryption_key"
           unset site_encryption_key
           bench --site test_site set-config allow_tests 1 --parse
