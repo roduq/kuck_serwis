@@ -15,6 +15,7 @@ from kuck_serwis.repair_photo_evidence_store import (
 	_issue_actor_scoped_repair_access,
 	read_scoped_repair_photo_evidence,
 	read_scoped_repair_photo_file_access,
+	resolve_actor_scoped_repair_access,
 	revalidate_scoped_repair_photo_file_access,
 )
 
@@ -138,6 +139,21 @@ class TestRepairPhotoEvidenceStoreFrappe(IntegrationTestCase):
 		customer = _make_customer(owner)
 		repair = _make_repair(customer)
 		return owner, customer, repair
+
+	def test_public_id_resolver_is_actor_scoped_and_idor_safe(self):
+		owner, _customer, repair = self.fixture()
+		foreign = _make_user()
+		_make_customer(foreign)
+		proof = resolve_actor_scoped_repair_access(repair_id=repair.public_id, actor_identity=owner.name)
+		self.assertEqual(proof.repair_id, repair.public_id)
+		self.assertEqual(repr(proof), "ActorScopedRepairAccess(<redacted>)")
+		for actor, repair_id in (
+			(foreign.name, repair.public_id),
+			(owner.name, "rpr_" + "Z" * 32),
+		):
+			with self.assertRaises(RepairPhotoEvidenceStoreError) as failure:
+				resolve_actor_scoped_repair_access(repair_id=repair_id, actor_identity=actor)
+			self.assertIs(failure.exception.code, RepairPhotoEvidenceStoreCode.SCOPED_REPAIR_NOT_FOUND)
 
 	def test_actor_scoped_private_metadata_and_savepoint_rollback(self):
 		owner, _customer, repair = self.fixture()

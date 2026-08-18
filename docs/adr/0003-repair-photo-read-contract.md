@@ -1,7 +1,7 @@
 # ADR 0003 — publiczny kontrakt metadanych i odczytu zdjęć napraw
 
-Status: **PROPOSED**; obie capability pozostają wyłączone, FILE-01 pozostaje
-`GAP/BLOCKED`
+Status: **ACCEPTED (metadata-only, rollout disabled)**; content capability i
+FILE-01 pozostają `GAP/BLOCKED`
 
 Data: 2026-08-15
 
@@ -9,9 +9,11 @@ Audytowana baza: `be075dee7606fedd5eead8935f2bfde494861dbf`
 
 ## Cel i charakter dokumentu
 
-Ten ADR opisuje przyszłą, wersjonowaną granicę metadanych oraz kontrolowanego
-odczytu zdjęć napraw. Nie udostępnia endpointu, nie włącza capability, nie
-rozstrzyga polityki widoczności, sposobu prezentacji, retencji ani polityki AV.
+Ten ADR opisuje wersjonowaną granicę metadanych oraz przyszłego kontrolowanego
+odczytu zdjęć napraw. Decyzja Kuck z 2026-08-18 zatwierdza właścicielowi naprawy
+widok liczby i pozycji zdjęć spełniających canonical private exact-attachment
+evidence. Nie udostępnia endpointu, nie włącza capability i nie rozstrzyga
+retencji ani polityki AV.
 Nie uznaje istniejących zdjęć za bezpieczne lub przeznaczone dla klienta.
 
 Dokument jest decyzjo-neutralnym kontraktem bramek: wskazuje, jakie decyzje i
@@ -133,14 +135,18 @@ zwrócić model:
 {
   "schema": "repair-photo-metadata/v1",
   "repair_id": "rpr_...",
+  "photo_count": 1,
   "items": [
     {"position": 1, "state": "metadata_only"}
   ]
 }
 ```
 
-`items` jest tuple/listą maksymalnie 20 unikalnych pozycji dodatnich,
-posortowanych rosnąco. Dokładny zbiór pozycji zależy od zatwierdzonej VIS-01;
+`photo_count` jest dokładnie równe długości `items`. `items` jest listą
+maksymalnie 20 unikalnych pozycji dodatnich, posortowanych rosnąco. Pozycje są
+oryginalnymi wartościami `idx` i nie są renumerowane. Widoczne są wszystkie i
+tylko child rows przechodzące canonical private exact-attachment evidence;
+pojedynczy unsafe row blokuje cały payload, bez częściowego wyniku.
 do tego czasu wynik nie może być publicznie zbudowany. `state` ma dokładnie
 `metadata_only` i nie obiecuje, że treść jest dostępna, bezpieczna lub
 downloadable.
@@ -349,8 +355,8 @@ staging, nie po samym zatwierdzeniu tego ADR.
 
 | ID | Właściciel | Wymagana decyzja | Brak decyzji |
 |---|---|---|---|
-| VIS-01 | Kuck + Service + Privacy | Które zdjęcia i od którego momentu są widoczne klientowi; czy potrzebne pole approval/author/source. | Obie capability false. |
-| VIS-02 | Kuck + UX | Czy metadata bez dostępnej treści ma być pokazywana i z jakim neutralnym stanem. | Metadata false. |
+| VIS-01 | ACCEPTED 2026-08-18 | Właściciel naprawy widzi liczbę i pozycje wszystkich canonical private exact-attached child rows; `opis`, autor i treść nie są ujawniane. | Metadata może przejść dalsze readiness gates. |
+| VIS-02 | ACCEPTED 2026-08-18 | Metadata może być pokazana jako neutralne `metadata_only`; nie obiecuje miniatury ani pobrania. | Content pozostaje false. |
 | ROUTE-01 | Kuck + `kuck_shop` + Security | Exact URL/owner i czy content jest osobnym zasobem czy częścią portalu. | Brak route/hooka. |
 | DISP-01 | Kuck + UX + Security | `inline` albo `attachment`, bezpieczna nazwa techniczna i zachowanie mobile. | Brak success response. |
 | COLLISION-01 | Platform + Security | Dedykowany storage, request deny, reverse proxy lub inny mechanizm eliminujący stock route bez core fork. | Content false. |

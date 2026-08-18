@@ -14,6 +14,7 @@ from kuck_serwis.repair_photo_evidence_store import (
 	_issue_actor_scoped_repair_access,
 	read_scoped_repair_photo_evidence,
 	read_scoped_repair_photo_file_access,
+	resolve_actor_scoped_repair_access,
 	revalidate_scoped_repair_photo_file_access,
 )
 from kuck_serwis.repair_photo_metadata import MAX_PHOTOS_PER_REPAIR, ScopedRepairPhotoEvidence
@@ -102,6 +103,34 @@ class TestRepairPhotoEvidenceStore(unittest.TestCase):
 
 	def read(self, value, *, scoped_access=None):
 		return read_scoped_repair_photo_evidence(scoped_access or access(), reader=lambda **_kwargs: value)
+
+	def test_public_id_resolver_issues_one_redacted_sealed_access(self):
+		calls = []
+
+		def reader(**kwargs):
+			calls.append(kwargs)
+			return ((REPAIR_NAME,),)
+
+		proof = resolve_actor_scoped_repair_access(repair_id=REPAIR_ID, actor_identity=ACTOR, reader=reader)
+		self.assertIs(type(proof), ActorScopedRepairAccess)
+		self.assertEqual(repr(proof), "ActorScopedRepairAccess(<redacted>)")
+		self.assertEqual(calls, [{"repair_id": REPAIR_ID, "actor_identity": ACTOR, "limit": 2}])
+
+	def test_public_id_resolver_rejects_missing_duplicate_and_malformed_rows(self):
+		for value, code in (
+			((), RepairPhotoEvidenceStoreCode.SCOPED_REPAIR_NOT_FOUND),
+			(((REPAIR_NAME,), ("NAP-2",)), RepairPhotoEvidenceStoreCode.EVIDENCE_MALFORMED),
+			(((1,),), RepairPhotoEvidenceStoreCode.EVIDENCE_MALFORMED),
+		):
+			with self.subTest(value=value):
+				self.assert_code(
+					code,
+					lambda value=value: resolve_actor_scoped_repair_access(
+						repair_id=REPAIR_ID,
+						actor_identity=ACTOR,
+						reader=lambda **_kwargs: value,
+					),
+				)
 
 	def test_empty_and_one_photo_return_exact_g064_dto(self):
 		self.assertEqual(self.read(rows()), ())

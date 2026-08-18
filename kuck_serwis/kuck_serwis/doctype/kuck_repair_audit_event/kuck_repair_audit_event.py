@@ -33,7 +33,7 @@ _EVENT_FIELDS: Final = frozenset(
 		"latency_ms",
 	}
 )
-_OPERATIONS: Final = frozenset({"list", "get"})
+_OPERATIONS: Final = frozenset({"list", "get", "photo_metadata_get"})
 _OUTCOMES: Final = frozenset({"success", "deny", "error"})
 _ACTOR_CLASSES: Final = frozenset({"guest", "website_user", "system_user", "disabled_user", "unknown"})
 _RESULT_CODES: Final = frozenset(
@@ -111,10 +111,14 @@ class DurableRepairAuditSink:
 def _validate_and_normalize_event(event: dict[str, object]) -> dict[str, object]:
 	if type(event) is not dict or set(event) != _EVENT_FIELDS:
 		raise ValueError("Audit event does not match the v1 allowlist.")
-	if event["event"] != "kuck_serwis.public_contract.audit.v1":
+	valid_contract_event = (
+		event["contract"] == "kuck-serwis/v1" and event["event"] == "kuck_serwis.public_contract.audit.v1"
+	) or (
+		event["contract"] == "kuck-serwis-repair-photo/v1"
+		and event["event"] == "kuck_serwis.repair_photo.audit.v1"
+	)
+	if not valid_contract_event:
 		raise ValueError("Unsupported audit event.")
-	if event["contract"] != "kuck-serwis/v1":
-		raise ValueError("Unsupported audit contract.")
 	if type(event["schema_revision"]) is not int or event["schema_revision"] != 1:
 		raise ValueError("Unsupported audit schema revision.")
 	correlation_id = event["correlation_id"]
@@ -122,6 +126,8 @@ def _validate_and_normalize_event(event: dict[str, object]) -> dict[str, object]
 		raise ValueError("Invalid audit correlation ID.")
 	if event["operation"] not in _OPERATIONS:
 		raise ValueError("Invalid audit operation.")
+	if (event["contract"] == "kuck-serwis/v1") != (event["operation"] in {"list", "get"}):
+		raise ValueError("Audit operation does not match contract.")
 	if event["outcome"] not in _OUTCOMES:
 		raise ValueError("Invalid audit outcome.")
 	if event["actor_class"] not in _ACTOR_CLASSES:
@@ -139,7 +145,7 @@ def _validate_and_normalize_event(event: dict[str, object]) -> dict[str, object]
 			raise ValueError(f"Invalid audit {fieldname}.")
 	if event["operation"] == "list" and repair_hash is not None:
 		raise ValueError("List events cannot contain a repair handle hash.")
-	if event["operation"] == "get" and repair_hash is None:
+	if event["operation"] in {"get", "photo_metadata_get"} and repair_hash is None:
 		raise ValueError("Get events require a repair handle hash.")
 	if (event["result_code"] == "OK") != (event["outcome"] == "success"):
 		raise ValueError("Audit result and outcome do not match.")

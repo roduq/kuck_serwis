@@ -63,7 +63,7 @@
    "fieldname": "operation",
    "fieldtype": "Select",
    "label": "Operation",
-   "options": "list\nget",
+   "options": "list\nget\nphoto_metadata_get",
    "read_only": 1,
    "reqd": 1
   },

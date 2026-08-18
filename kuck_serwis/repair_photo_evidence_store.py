@@ -150,6 +150,25 @@ class ScopedPrivateFileAccess:
 
 RawEvidenceRow: TypeAlias = tuple[object, ...]
 PhotoEvidenceReader: TypeAlias = Callable[..., tuple[RawEvidenceRow, ...]]
+RepairAccessReader: TypeAlias = Callable[..., tuple[RawEvidenceRow, ...]]
+
+
+REPAIR_ACCESS_SQL = r"""
+SELECT n.`name`
+FROM `tabNaprawa` n
+JOIN `tabPortal User` pu FORCE INDEX (`user`)
+	ON pu.`parent` = n.`klient`
+	AND pu.`parenttype` = 'Customer'
+	AND pu.`parentfield` = 'portal_users'
+	AND pu.`user` = %(actor_identity)s
+JOIN `tabUser` u
+	ON u.`name` = pu.`user`
+	AND u.`enabled` = 1
+	AND u.`user_type` = 'Website User'
+WHERE n.`public_id` = %(repair_id)s
+ORDER BY n.`name`
+LIMIT 2
+"""
 
 
 # Both bounded collections use LIMIT max + 1 before any correlated check.  The
@@ -308,6 +327,38 @@ SELECT
 FROM evaluated_photos p
 ORDER BY row_kind, position
 """
+
+
+def resolve_actor_scoped_repair_access(
+	*,
+	repair_id: str,
+	actor_identity: str,
+	reader: RepairAccessReader | None = None,
+) -> ActorScopedRepairAccess:
+	"""Resolve one public repair ID without exposing its internal document name."""
+
+	_validate_repair_id(repair_id)
+	_validate_actor_identity(actor_identity)
+	try:
+		rows = (
+			_read_access_rows(repair_id=repair_id, actor_identity=actor_identity)
+			if reader is None
+			else reader(repair_id=repair_id, actor_identity=actor_identity, limit=2)
+		)
+	except RepairPhotoEvidenceStoreError:
+		raise
+	except Exception:
+		_raise(RepairPhotoEvidenceStoreCode.EVIDENCE_READ_FAILED)
+	if type(rows) is not tuple or len(rows) != 1:
+		if type(rows) is tuple and len(rows) == 0:
+			_raise(RepairPhotoEvidenceStoreCode.SCOPED_REPAIR_NOT_FOUND)
+		_raise(RepairPhotoEvidenceStoreCode.EVIDENCE_MALFORMED)
+	row = rows[0]
+	if type(row) is not tuple or len(row) != 1 or type(row[0]) is not str:
+		_raise(RepairPhotoEvidenceStoreCode.EVIDENCE_MALFORMED)
+	return _issue_actor_scoped_repair_access(
+		repair_name=row[0], repair_id=repair_id, actor_identity=actor_identity
+	)
 
 
 # A locking read is deliberately used for post-filesystem revalidation.  Under
@@ -598,6 +649,23 @@ def _read_evidence_rows(
 			"fetch_limit": fetch_limit,
 		},
 	)
+	return tuple(tuple(row) for row in rows)
+
+
+def _read_access_rows(*, repair_id: str, actor_identity: str) -> tuple[RawEvidenceRow, ...]:
+	try:
+		import frappe
+	except ImportError:
+		_raise(RepairPhotoEvidenceStoreCode.UNSUPPORTED_DATABASE)
+	if getattr(frappe.db, "db_type", None) != "mariadb":
+		_raise(RepairPhotoEvidenceStoreCode.UNSUPPORTED_DATABASE)
+	try:
+		rows = frappe.db.sql(
+			REPAIR_ACCESS_SQL,
+			{"repair_id": repair_id, "actor_identity": actor_identity},
+		)
+	except Exception:
+		_raise(RepairPhotoEvidenceStoreCode.EVIDENCE_READ_FAILED)
 	return tuple(tuple(row) for row in rows)
 
 
