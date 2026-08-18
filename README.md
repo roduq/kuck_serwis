@@ -85,10 +85,11 @@ GitHub Actions checks:
 - `ci/pure` compiles the application and runs the 15 framework-independent test
   modules with the Pillow version required by the pinned Frappe v16 release.
 
-The remote workflow deliberately does not claim Frappe, MariaDB, migration, or
-site integration coverage. Those tests require the protected six-application
-bench and are run through `bench --site <site> run-tests --app kuck_serwis` in
-the controlled integration environment.
+`ci/frappe-fullstack` also creates an isolated site from the exact public
+Frappe and ERPNext revisions, runs migration, and executes the complete
+`kuck_serwis` application suite against pinned MariaDB and Valkey images. It
+does not install `kuck_shop`, Webshop or Payments and therefore makes no claim
+about the protected six-application release composition or provider runtime.
 
 ### License
 

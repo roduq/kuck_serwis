@@ -8,10 +8,11 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _CI_WORKFLOW = _REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 _LINTER_WORKFLOW = _REPOSITORY_ROOT / ".github" / "workflows" / "linter.yml"
 
-_ACTION_PINS = {
+_BASE_ACTION_PINS = {
 	"actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
 	"actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
 }
+_NODE_ACTION_PIN = "actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f"
 _PURE_MODULES = (
 	"kuck_serwis.tests.test_audit_passive_db_preflight",
 	"kuck_serwis.tests.test_audit_passive_probe",
@@ -46,10 +47,13 @@ class TestCIContract(unittest.TestCase):
 				self.assertIn("python-version: '3.14.6'", text)
 
 				uses = re.findall(r"(?m)^\s+uses:\s+([^\s#]+)", text)
-				self.assertEqual(
-					uses,
-					[f"{action}@{revision}" for action, revision in _ACTION_PINS.items()],
-				)
+				expected = [f"{action}@{revision}" for action, revision in _BASE_ACTION_PINS.items()]
+				if path == _CI_WORKFLOW:
+					expected.extend(
+						[f"{action}@{revision}" for action, revision in _BASE_ACTION_PINS.items()]
+					)
+					expected.append(_NODE_ACTION_PIN)
+				self.assertEqual(uses, expected)
 
 	def test_ci_runs_the_exact_hermetic_module_set(self) -> None:
 		text = _read_workflow(_CI_WORKFLOW)
@@ -58,12 +62,24 @@ class TestCIContract(unittest.TestCase):
 		self.assertIn("Pillow==12.2.0", text)
 		self.assertIn("python -m compileall -q kuck_serwis", text)
 
-	def test_fullstack_job_is_manual_and_fails_closed(self) -> None:
+	def test_fullstack_job_uses_exact_public_dependencies(self) -> None:
 		text = _read_workflow(_CI_WORKFLOW)
-		self.assertIn("name: ci/frappe-fullstack (BLOCKED)", text)
-		self.assertIn("if: ${{ github.event_name == 'workflow_dispatch' }}", text)
-		self.assertIn("PRIVATE_CROSS_REPO_CREDENTIAL_UNAVAILABLE", text)
-		self.assertIn("exit 1", text)
+		self.assertIn("name: ci/frappe-fullstack", text)
+		self.assertNotIn("ci/frappe-fullstack (BLOCKED)", text)
+		self.assertIn("frappe-bench==5.29.1", text)
+		self.assertIn("python-version: '3.14.6'", text)
+		self.assertIn("node-version: '24.14.0'", text)
+		self.assertIn("FRAPPE_SHA: 5c16f12192815204a7eda2b2ab365a557a6e7def", text)
+		self.assertIn("ERPNEXT_SHA: 6bcab7cfc8df98660a6b61422bc8765cf58552f1", text)
+		self.assertIn("mariadb:11.8.8@sha256:", text)
+		self.assertIn("valkey/valkey:9.0.5-alpine@sha256:", text)
+		self.assertIn("bench --site test_site install-app erpnext", text)
+		self.assertIn("bench --site test_site install-app kuck_serwis", text)
+		self.assertIn("bench --site test_site migrate", text)
+		self.assertIn("bench --site test_site run-tests --app kuck_serwis", text)
+		for forbidden in ("kuck_shop", "webshop", "payments", "allow_guest", "--force"):
+			with self.subTest(forbidden=forbidden):
+				self.assertNotIn(forbidden, text)
 
 	def test_linter_checks_the_exact_candidate_delta(self) -> None:
 		text = _read_workflow(_LINTER_WORKFLOW)

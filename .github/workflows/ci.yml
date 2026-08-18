@@ -61,14 +61,107 @@ jobs:
           kuck_serwis.tests.test_repair_photo_retention
           kuck_serwis.tests.test_repair_photo_storage
 
-  fullstack-blocked:
-    name: ci/frappe-fullstack (BLOCKED)
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+  fullstack:
+    name: ci/frappe-fullstack
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 45
+    env:
+      DB_ROOT_PASSWORD: ci_only_db_root
+      FRAPPE_SHA: 5c16f12192815204a7eda2b2ab365a557a6e7def
+      ERPNEXT_SHA: 6bcab7cfc8df98660a6b61422bc8765cf58552f1
+    services:
+      mariadb:
+        image: mariadb:11.8.8@sha256:d3515fc42e3600f785d434c1c5a385326a0f9a21431f2d9a81609789d25ce830
+        env:
+          MARIADB_ROOT_PASSWORD: ci_only_db_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=2s
+          --health-retries=12
+      valkey:
+        image: valkey/valkey:9.0.5-alpine@sha256:1c7cbc09c329008ed134c5e5a16c90323b8c298813e716e82b20f77745a568bb
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="valkey-cli ping"
+          --health-interval=5s
+          --health-timeout=2s
+          --health-retries=12
     steps:
-      - name: Report protected dependency blocker
+      - name: Checkout candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+          check-latest: false
+
+      - name: Set up exact Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '24.14.0'
+          check-latest: false
+
+      - name: Install exact Bench CLI
+        run: python -m pip install --no-input frappe-bench==5.29.1
+
+      - name: Fetch exact public framework sources
         run: |
-          echo 'BLOCKED: PRIVATE_CROSS_REPO_CREDENTIAL_UNAVAILABLE'
-          echo 'No Frappe site, migration, or full-stack test was attempted.'
-          exit 1
+          git init -q "$RUNNER_TEMP/frappe-src"
+          git -C "$RUNNER_TEMP/frappe-src" remote add origin https://github.com/frappe/frappe.git
+          git -C "$RUNNER_TEMP/frappe-src" fetch --depth=1 origin "$FRAPPE_SHA"
+          git -C "$RUNNER_TEMP/frappe-src" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/frappe-src" rev-parse HEAD)" = "$FRAPPE_SHA"
+
+          git init -q "$RUNNER_TEMP/erpnext-src"
+          git -C "$RUNNER_TEMP/erpnext-src" remote add origin https://github.com/frappe/erpnext.git
+          git -C "$RUNNER_TEMP/erpnext-src" fetch --depth=1 origin "$ERPNEXT_SHA"
+          git -C "$RUNNER_TEMP/erpnext-src" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/erpnext-src" rev-parse HEAD)" = "$ERPNEXT_SHA"
+
+      - name: Initialize isolated Bench
+        run: |
+          bench init "$RUNNER_TEMP/frappe-bench" \
+            --frappe-path "$RUNNER_TEMP/frappe-src" \
+            --python "$(command -v python)" \
+            --skip-assets \
+            --skip-redis-config-generation \
+            --no-procfile \
+            --no-backups
+          cd "$RUNNER_TEMP/frappe-bench"
+          bench get-app --soft-link --skip-assets "$RUNNER_TEMP/erpnext-src"
+          bench get-app --soft-link --skip-assets "$GITHUB_WORKSPACE"
+
+      - name: Create isolated test site
+        run: |
+          cd "$RUNNER_TEMP/frappe-bench"
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+          bench new-site test_site \
+            --db-type mariadb \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --db-root-username root \
+            --db-root-password "$DB_ROOT_PASSWORD" \
+            --db-name test_kuck_serwis \
+            --db-password test_kuck_serwis \
+            --admin-password ci_only_admin \
+            --no-mariadb-socket
+          bench --site test_site set-config allow_tests 1 --parse
+          bench --site test_site set-config mute_emails 1 --parse
+          bench --site test_site set-config pause_scheduler 1 --parse
+          bench --site test_site install-app erpnext
+          bench --site test_site install-app kuck_serwis
+          bench --site test_site migrate
+
+      - name: Run complete application suite
+        run: |
+          cd "$RUNNER_TEMP/frappe-bench"
+          bench --site test_site run-tests --app kuck_serwis
