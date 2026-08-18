@@ -177,10 +177,15 @@ class TestOperationalPolicyManifest(unittest.TestCase):
 		self.assertNotIn("email", {field.name for field in dataclasses.fields(POLICY)})
 
 	def test_manifest_and_nested_values_are_frozen(self):
-		for value in (POLICY, POLICY.retention_rules[0], POLICY.backup_rotation[0], POLICY.alert_thresholds):
-			with self.subTest(value_type=type(value).__name__):
-				with self.assertRaises((dataclasses.FrozenInstanceError, AttributeError)):
-					value.version = 2
+		for value, field_name, replacement in (
+			(POLICY, "version", 2),
+			(POLICY.retention_rules[0], "retention_days", 1),
+			(POLICY.backup_rotation[0], "retention_days", 1),
+			(POLICY.alert_thresholds, "active_probe_fresh_seconds", 1),
+		):
+			with self.subTest(value_type=type(value).__name__, field_name=field_name):
+				with self.assertRaises(dataclasses.FrozenInstanceError):
+					setattr(value, field_name, replacement)
 
 	def test_forged_or_modified_policy_fails_closed(self):
 		forged = object.__new__(type(POLICY))

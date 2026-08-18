@@ -81,6 +81,14 @@ class FatalProbe(BaseException):
 
 
 class TestRepairPhotoContent(unittest.TestCase):
+	def setUp(self):
+		# Frappe intentionally enables Pillow's process-global truncated-image
+		# mode.  This pure decoder must be tested under its required safe value
+		# without leaking that test-only value into the surrounding suite.
+		decoder_configuration = patch.object(ImageFile, "LOAD_TRUNCATED_IMAGES", False)
+		decoder_configuration.start()
+		self.addCleanup(decoder_configuration.stop)
+
 	def assert_code(self, code, call):
 		with self.assertRaises(RepairPhotoContentError) as raised:
 			call()
