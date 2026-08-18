@@ -304,6 +304,27 @@ nie ustawia żadnej z ośmiu bramek i ma wszystkie flagi purge, delivery,
 activation, capability oraz readiness literalnie false. Collector, trwałość,
 alert streak i kompozycja pełnego readiness nadal nie istnieją.
 
+### Read-only existing-DB preflight (G0-218)
+
+`collect_existing_db_preflight_v1()` jest ciemnym, wywoływanym jawnie
+preflightem istniejącej bazy, a nie collectorem pasywnego monitora. Korzysta z
+izolowanego połączenia audytu, wykonuje tylko stałą allowlistę `SELECT` i
+`EXPLAIN SELECT`, nie steruje transakcją i zwraca wyłącznie uporządkowane kody.
+Dowodzi osobno obecności pól, unikalnych kluczy, braku uprawnień DocPerm,
+indeksu purge oraz tych negatywnych kontroli danych, dla których plan jest
+indeksowy i mieści się w budżecie 10 000 szacowanych wierszy.
+
+Brak dowodu bounded planu nie uruchamia zapytania do danych. W szczególności
+obecny check nieznanego statusu kończy się `STATUS_DATA_NOT_PROVEN`, gdy
+`EXPLAIN` pokazuje pełny skan; nie jest to dowód poprawności statusów. Dialekty
+inne niż MariaDB są w v1 jawnie `DATABASE_DIALECT_NOT_PROVEN`. Wynik nie buduje
+`PassiveProbeObservations`, nie może zwrócić `PASSIVE_OK`, nie komponuje
+readiness i ma wszystkie flagi assessment, purge, delivery, activation,
+capability oraz readiness literalnie false. Nie ma hooka, schedulera, zapisu,
+metryki ani automatycznego wywołania. Dodanie indeksu, obsługi kolejnego
+dialektu albo użycie kodów jako pełnego passive evidence wymaga osobnego etapu
+i ponownej walidacji na realnym site.
+
 ## Exact odczyt w `_is_ready()`
 
 Przyszła implementacja zachowuje `_account_read_enabled()` jako nadrzędną bramkę
