@@ -77,6 +77,10 @@ class TestCIContract(unittest.TestCase):
 		self.assertIn("bench --site test_site install-app kuck_serwis", text)
 		self.assertIn("bench --site test_site migrate", text)
 		self.assertIn("bench --site test_site run-tests --app kuck_serwis", text)
+		self.assertIn("secrets.token_bytes(32)", text)
+		self.assertIn('set-config encryption_key "$site_encryption_key"', text)
+		self.assertIn("unset site_encryption_key", text)
+		self.assertNotRegex(text, r"(?m)^\s+encryption_key:\s+\S+")
 		for forbidden in ("kuck_shop", "webshop", "payments", "allow_guest", "--force"):
 			with self.subTest(forbidden=forbidden):
 				self.assertNotIn(forbidden, text)
