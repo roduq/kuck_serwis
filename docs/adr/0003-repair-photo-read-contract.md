@@ -1,7 +1,7 @@
 # ADR 0003 — publiczny kontrakt metadanych i odczytu zdjęć napraw
 
-Status: **ACCEPTED (metadata-only, rollout disabled)**; content capability i
-FILE-01 pozostają `GAP/BLOCKED`
+Status: **ACCEPTED (metadata-only, controlled rollout per site)**; content
+capability i FILE-01 pozostają `GAP/BLOCKED`
 
 Data: 2026-08-15
 
@@ -15,6 +15,13 @@ widok liczby i pozycji zdjęć spełniających canonical private exact-attachmen
 evidence. Nie udostępnia endpointu, nie włącza capability i nie rozstrzyga
 retencji ani polityki AV.
 Nie uznaje istniejących zdjęć za bezpieczne lub przeznaczone dla klienta.
+
+Aktualizacja 2026-08-21: zaakceptowana liczba i pozycje mogą zostać włączone
+literalną flagą per site po aktywacji account-read oraz dostępności trwałego
+audytu. Operacja wciąż rewaliduje Website User → Customer.portal_users → Naprawa
+→ child row → prywatny exact File i zwraca wyłącznie `photo_count`, `position`
+oraz `metadata_only`. Nie emituje File ID, URL, ścieżki, MIME ani bajtów.
+Wyłączenie flagi natychmiast przywraca `features=[]`.
 
 Dokument jest decyzjo-neutralnym kontraktem bramek: wskazuje, jakie decyzje i
 dowody muszą istnieć, zanim osobny rollout będzie mógł zwrócić metadane albo

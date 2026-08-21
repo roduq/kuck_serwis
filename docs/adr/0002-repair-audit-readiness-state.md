@@ -4,6 +4,13 @@ Status: proposed; capability pozostaje wyłączone
 
 Data: 2026-08-14
 
+Aktualizacja 2026-08-21: ten ADR opisuje opcjonalne, rozszerzone monitorowanie po
+v1 i nie blokuje kontrolowanego uruchomienia podstawowego `account-read`.
+W v1 aktywację chronią odwracalna flaga per-site, bezpośrednie kontrole
+strukturalne oraz obowiązkowy trwały ACK audytu na każdym żądaniu; błąd dowolnej
+bramki zamyka odczyt. Collector, snapshot CAS i etapowy procentowy rollout
+pozostają usprawnieniem po uruchomieniu.
+
 ## Kontekst
 
 Trwały sink audytu i aktywny canary istnieją, lecz nie ma collectora,

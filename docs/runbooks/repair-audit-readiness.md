@@ -5,6 +5,11 @@ wyłączone.
 
 Data audytu: 2026-08-14
 
+Aktualizacja 2026-08-21: poniższy collector i trwały snapshot są zakresem po
+v1, a nie warunkiem uruchomienia podstawowego portalu. Kontrolowany rollout v1
+używa flagi per-site, istniejących bezpośrednich kontroli gotowości oraz
+obowiązkowego trwałego ACK audytu; każda awaria nadal daje wynik fail-closed.
+
 Zakres dokumentu: przyszły collector i trwała bramka łączące istniejący aktywny
 probe z czystym plannerem readiness. Dokument nie dodaje hooka, schedulera,
 DocType, migracji ani konfiguracji i nie zatwierdza retencji, legal hold,
@@ -51,16 +56,18 @@ interpretowane jako gotowość.
    brak aktywnego probe daje `ACTIVE_PROBE_MISSING`.
 7. `AuditReadinessPlan` zawiera wyłącznie `capability_ready` oraz uporządkowane
    kody. `READY` może wystąpić tylko jako jedyny kod wyniku `true`.
-8. `public_contract.v1._AUDIT_AND_MONITORING_READY` jest stałe `False`.
-   `_account_read_enabled()` wymaga ponadto literalnie włączonej flagi rollout i
-   przejścia `_is_ready()`; wyjątek daje `False`.
+8. W historycznej rewizji objętej audytem
+   `public_contract.v1._AUDIT_AND_MONITORING_READY` było stałe `False`.
+   Od aktualizacji v1 z 2026-08-21 `_account_read_enabled()` wymaga literalnie
+   włączonej flagi rollout i przejścia `_is_ready()`; wyjątek daje `False`.
 9. `_is_ready()` sprawdza także sink i klucze, pole oraz unikalny indeks
    `Naprawa.public_id`, brak pustych public ID i brak nieznanych statusów.
 10. W `hooks.py` blok `scheduler_events` jest tylko komentarzem. Nie istnieje
     collector, pasywny monitor ani trwały rekord readiness.
 
-Oznacza to, że poprawny ręczny wynik aktywnego probe nie włącza i nie może dziś
-włączyć `account-read`.
+Wniosek ten opisuje historyczną rewizję z 2026-08-14. Aktualny v1 nie uzależnia
+podstawowego odczytu od przyszłego collectora; nadal wymaga wszystkich
+bezpośrednich bramek i trwałego audytu.
 
 ## Docelowa bramka aktywacji — wymaganie przyszłe
 

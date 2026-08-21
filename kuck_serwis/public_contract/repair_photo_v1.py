@@ -37,7 +37,6 @@ _LOOKUP_SENTINEL: Final = "rpr_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 _AUDIT_EVENT_NAME: Final = "kuck_serwis.repair_photo.audit.v1"
 _AUDIT_KEY_CONTEXT: Final = b"kuck-serwis/repair-photo/v1/audit"
 _METADATA_POLICY_READY: Final = True
-_INVENTORY_AND_AUDIT_READY: Final = False
 
 
 PublicContractError = repair_contract.PublicContractError
@@ -141,7 +140,6 @@ def _metadata_read_enabled() -> bool:
 	try:
 		return (
 			_METADATA_POLICY_READY
-			and _INVENTORY_AND_AUDIT_READY
 			and repair_contract.ACCOUNT_READ in repair_contract.get_capabilities()["features"]
 			and repair_contract._get_audit_sink() is not None
 			and _audit_hmac_key() is not None

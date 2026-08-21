@@ -1,9 +1,19 @@
 # ADR 0001 — publiczny kontrakt odczytu napraw v1
 
-Status: proposed; wdrożenie wymaga schematu, backfillu i testów IDOR
+Status: accepted; schema, backfill, trwały audit i testy IDOR wdrożone,
+kontrolowany rollout per site
 
 Data: 2026-08-14
 Audytowana rewizja: `1820cc644ce1eb146b6e19f074c6ca4768827b33`
+
+Aktualizacja 2026-08-21: zakres account-read został zaakceptowany biznesowo.
+Zaawansowany collector snapshotów readiness pozostaje usprawnieniem po v1, a
+nie blokadą podstawowego portalu. Capability może zostać włączone wyłącznie
+literalną flagą per site i tylko gdy w każdym odczycie przechodzą bezpośrednie
+kontrole trwałego sinka audytu, kluczy, schematu/public_id, unikalnego indeksu,
+kompletności ID oraz allowlisty statusów. Każda operacja nadal wymaga trwałego
+ACK audytu; błąd wyłącza wynik fail-closed. Wyłączenie flagi jest natychmiastowym
+rollbackiem bez migracji danych.
 
 ## Kontekst
 

@@ -47,10 +47,17 @@ class TestRepairPhotoPublicContractV1(IntegrationTestCase):
 		super().setUp()
 		self.repair_id = "rpr_" + "B" * 32
 		self.sink = _Sink()
+		self._flag_was_present = repair_photo_v1.ROLLOUT_FLAG in frappe.conf
+		self._previous_flag = frappe.conf.get(repair_photo_v1.ROLLOUT_FLAG)
+		frappe.conf.pop(repair_photo_v1.ROLLOUT_FLAG, None)
 		frappe.set_user("Guest")
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		if self._flag_was_present:
+			frappe.conf[repair_photo_v1.ROLLOUT_FLAG] = self._previous_flag
+		else:
+			frappe.conf.pop(repair_photo_v1.ROLLOUT_FLAG, None)
 		super().tearDown()
 
 	def _call(self, evidence=()):
@@ -74,6 +81,29 @@ class TestRepairPhotoPublicContractV1(IntegrationTestCase):
 				"features": [],
 			},
 		)
+
+	def test_capability_can_be_enabled_only_with_account_read_and_audit(self):
+		frappe.conf[repair_photo_v1.ROLLOUT_FLAG] = True
+		with (
+			patch.object(
+				repair_photo_v1.repair_contract,
+				"get_capabilities",
+				return_value={"features": [repair_photo_v1.repair_contract.ACCOUNT_READ]},
+			),
+			patch.object(repair_photo_v1.repair_contract, "_get_audit_sink", return_value=self.sink),
+			patch.object(repair_photo_v1, "_audit_hmac_key", return_value=b"a" * 32),
+		):
+			self.assertEqual(
+				repair_photo_v1.get_capabilities()["features"],
+				[repair_photo_v1.ACCOUNT_PHOTO_METADATA_READ],
+			)
+
+		with patch.object(
+			repair_photo_v1.repair_contract,
+			"get_capabilities",
+			return_value={"features": []},
+		):
+			self.assertEqual(repair_photo_v1.get_capabilities()["features"], [])
 
 	def test_projects_only_sorted_positions_and_count(self):
 		result = self._call(_evidence(self.repair_id, 9, 2))

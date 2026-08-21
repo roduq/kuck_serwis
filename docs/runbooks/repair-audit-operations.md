@@ -3,6 +3,12 @@
 Status: kontrakt proponowany; `account-read` pozostaje wyłączone do zatwierdzenia
 decyzji z sekcji „Minimalne decyzje” i spełnienia całej bramki gotowości.
 
+Aktualizacja 2026-08-21: podstawowy `account-read` może być kontrolowanie
+włączony w v1 flagą per-site po przejściu bezpośrednich kontroli strukturalnych.
+Każde żądanie nadal wymaga trwałego ACK istniejącego sinka i przy jego braku
+kończy się fail-closed. Rozszerzony collector, snapshot readiness, automatyczny
+purge i alerting pozostają pracą po v1 i nie blokują pierwszego uruchomienia.
+
 Zakres: trwały sink `Kuck Repair Audit Event` z rewizji `b9fb74a`, używany przez
 `kuck_serwis.public_contract.v1`. Dokument nie zmienia publicznego API, schematu
 ani polityki biznesowej. Każda implementacja nowego DocType, indeksu lub zmiany

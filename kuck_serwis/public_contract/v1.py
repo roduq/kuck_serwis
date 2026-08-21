@@ -35,7 +35,6 @@ _CURSOR_MAX_LENGTH: Final = 1024
 _CURSOR_SIGNATURE_BYTES: Final = 32
 _CURSOR_KEY_CONTEXT: Final = b"kuck-serwis/public-contract/v1/cursor"
 _AUDIT_KEY_CONTEXT: Final = b"kuck-serwis/public-contract/v1/audit"
-_AUDIT_AND_MONITORING_READY: Final = False
 _AUDIT_EVENT_NAME: Final = "kuck_serwis.public_contract.audit.v1"
 _AUDIT_LOGGER_NAME: Final = "kuck_serwis.public_contract.audit"
 _CURSOR_FIELDS: Final = frozenset(
@@ -146,8 +145,6 @@ def _account_read_enabled() -> bool:
 
 
 def _is_ready() -> bool:
-	if not _AUDIT_AND_MONITORING_READY:
-		return False
 	if _get_audit_sink() is None or _audit_hmac_key() is None:
 		return False
 	if _cursor_signing_key() is None:

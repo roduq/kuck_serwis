@@ -265,11 +265,18 @@ class TestPublicContractV1(IntegrationTestCase):
 			{"contract": "kuck-serwis/v1", "schema_revision": 1, "features": []},
 		)
 		frappe.conf[v1.ROLLOUT_FLAG] = True
-		with patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY):
-			# Retention, alert thresholds and durable sink rollout remain a hard gate.
-			self.assertEqual(v1.get_capabilities()["features"], [])
+		with (
+			patch.object(v1, "_cursor_signing_key", return_value=TEST_CURSOR_KEY),
+			patch.object(v1.frappe.db, "get_table_columns", return_value=["public_id"]),
+			patch.object(v1.frappe.db, "get_column_index", return_value=True),
+			patch.object(v1.frappe.db, "count", return_value=0),
+		):
+			self.assertEqual(v1.get_capabilities()["features"], [v1.ACCOUNT_READ])
 		frappe.conf[v1.ROLLOUT_FLAG] = False
 		with patch.object(v1, "_is_ready", return_value=True):
+			self.assertEqual(v1.get_capabilities()["features"], [])
+		frappe.conf[v1.ROLLOUT_FLAG] = True
+		with patch.object(v1, "_is_ready", return_value=False):
 			self.assertEqual(v1.get_capabilities()["features"], [])
 
 	def test_new_ids_are_random_formatted_and_immutable(self):
