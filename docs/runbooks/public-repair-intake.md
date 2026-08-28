@@ -11,8 +11,9 @@
 
 1. Otwórz `Nowe zgłoszenia online` w obszarze Kuck Serwis.
 2. Zweryfikuj kontakt, zegarek, opis, gwarancję i sposób przekazania/odbioru.
-3. Odszukaj istniejącego `Customer` lub utwórz go zgodnie z procedurą serwisu;
-   nie łącz kartotek wyłącznie po podobnym e-mailu.
+3. Odszukaj istniejącego `Customer` lub utwórz go dopiero po niezależnym
+   potwierdzeniu tożsamości zgodnie z procedurą serwisu. Nigdy nie twórz ani nie
+   łącz kartoteki Guest wyłącznie na podstawie podobnego e-maila lub telefonu.
 4. Ustaw sugerowany rodzaj naprawy. Dla wysyłki wartość musi być dodatnia i nie
    może przekroczyć 10 000 PLN.
 5. Gdy zegarek fizycznie dotrze, wybierz `Utwórz naprawę po przyjęciu`, potwierdź
@@ -28,6 +29,8 @@ drugi operator zmienił rekord — odśwież formularz i ponownie oceń stan.
 - Sukces nie pokazuje numeru ani linku do prywatnych danych. Klient otrzymuje
   informację, by nie wysyłać zegarka przed instrukcją.
 - Formularz nie generuje etykiety, płatności ani zlecenia Apaczka.
+- Telefon i e-mail służą do kontaktu w sprawie intake; konwersja nie włącza
+  automatycznie powiadomień SMS/e-mail o statusach naprawy.
 - Gość nie zobaczy zgłoszenia w portalu. Zalogowany klient zobaczy standardową
   naprawę dopiero po bezpiecznym powiązaniu i konwersji.
 
@@ -56,8 +59,10 @@ zatwierdzonej procedury.
    konwersja testowego intake po potwierdzeniu przyjęcia i kontrola uprawnień.
 5. Sprawdź stronę na 390 px i desktopie oraz potwierdź brak ID/PII w odpowiedzi i
    logach. Syntetyczny rekord oznacz i odrzuć; nie twórz wysyłki ani płatności.
+6. Potwierdź na dokładnej trasie nagłówek `Content-Security-Policy`, w tym
+   `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'` i
+   `form-action 'self'`; brak nagłówka zatrzymuje rollout.
 
 Rollback kodu pozostawia addytywny DocType i dane. Nie cofaj migracji przez
 kasowanie tabeli; przywróć poprzedni obraz, pozostaw metodę publiczną wyłączoną i
 zachowaj rekordy do pojednania.
-

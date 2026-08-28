@@ -13,8 +13,9 @@ from hashlib import sha256
 from typing import Final
 
 MAX_DECLARED_VALUE_PLN: Final = Decimal("10000.00")
-PRIVACY_REVISION: Final = "2026-08-25-v1"
-PRIVACY_PROOF_SHA256: Final = sha256(b"kuck.pl/polityka-prywatnosci/2026-08-25-v1").hexdigest()
+PRIVACY_URL: Final = "https://kuck.pl/pl/content/aeu-legal-privacy"
+PRIVACY_REVISION: Final = "2026-08-28-v2"
+PRIVACY_PROOF_SHA256: Final = sha256(f"{PRIVACY_URL}/{PRIVACY_REVISION}".encode()).hexdigest()
 _EMAIL_RE: Final = re.compile(r"^[^\s@]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,63}$")
 _PHONE_RE: Final = re.compile(r"^[+0-9][+0-9 ()-]{5,31}$")
 _IDEMPOTENCY_RE: Final = re.compile(r"^[A-Za-z0-9_-]{22,128}$")

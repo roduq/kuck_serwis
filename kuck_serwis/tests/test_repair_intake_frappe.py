@@ -10,7 +10,8 @@ from frappe.utils import get_test_client
 from frappe.website.serve import get_response_without_exception_handling
 
 from kuck_serwis import repair_intake
-from kuck_serwis.repair_intake_contract import PRIVACY_PROOF_SHA256, PRIVACY_REVISION
+from kuck_serwis.repair_intake_contract import PRIVACY_PROOF_SHA256, PRIVACY_REVISION, PRIVACY_URL
+from kuck_serwis.www.serwis.zglos_naprawe import CSP
 
 
 def _digest(value: str) -> str:
@@ -83,6 +84,8 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 		self.assertEqual(repair.klient, customer.name)
 		self.assertEqual(repair.model_zegarka, "Model Testowy")
 		self.assertEqual(repair.status, "Przyjęto")
+		self.assertEqual(repair.powiadom_sms, 0)
+		self.assertEqual(repair.powiadom_email, 0)
 		accepted = frappe.get_doc(repair_intake.DOCTYPE, intake.name)
 		self.assertEqual(accepted.status, "Przyjęte")
 		self.assertEqual(accepted.accepted_repair, repair.name)
@@ -127,9 +130,11 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 					base_url=f"http://{site}",
 				).result(timeout=10)
 		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.headers.getlist("Content-Security-Policy"), [CSP])
 		html = response.get_data(as_text=True)
 		self.assertEqual(html.count("<h1>"), 1)
 		self.assertIn('id="repair-intake-form"', html)
+		self.assertIn(f'href="{PRIVACY_URL}"', html)
 		self.assertNotIn("RIN-", html)
 
 

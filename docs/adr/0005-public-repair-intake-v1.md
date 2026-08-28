@@ -34,8 +34,15 @@ przyjęcie zegarka. Publiczny formularz nie może więc bezpośrednio tworzyć
    transakcyjne, blokowane wierszem, idempotentne i chronione rewizją `modified`.
 7. Snapshot zgłoszenia i dowody bezpieczeństwa są po zapisie niemutowalne.
    Odrzucenie wymaga powodu i jest kontrolowanym przejściem.
-8. Rewizja informacji o prywatności v1 to `2026-08-25-v1`; rekord przechowuje
-   rewizję i domenowo związany SHA-256 dowodu, a nie treść zgody.
+8. Rewizja informacji o prywatności v1 to `2026-08-28-v2`, a źródłem jest
+   opublikowana strona Kuck `https://kuck.pl/pl/content/aeu-legal-privacy`;
+   rekord przechowuje rewizję i domenowo związany SHA-256 dowodu, a nie treść
+   zgody.
+9. Publiczna trasa wymusza własny CSP: zasoby i połączenia tylko same-origin,
+   `object-src 'none'`, kontrolowane `base-uri`, `form-action` i
+   `frame-ancestors`. Tymczasowe `unsafe-inline` pozostaje wyłącznie dla
+   zgodności z inline bootstrappingiem Frappe v16; usunięcie go wymaga
+   frameworkowego nonce albo przebudowy bazowego szablonu.
 
 ## Granice i konsekwencje
 
@@ -47,6 +54,8 @@ przyjęcie zegarka. Publiczny formularz nie może więc bezpośrednio tworzyć
 - Automatyczne czyszczenie intake nie wchodzi do pierwszego pionu. Rekomendacja
   operacyjna: przegląd po 180 dniach dla rekordów odrzuconych i nieprzyjętych;
   purge dopiero po zatwierdzeniu polityki, legal hold i zgodności backupów.
+- Samo podanie telefonu lub e-maila nie jest opt-inem do powiadomień statusowych;
+  konwersja pozostawia oba kanały wyłączone do osobnej, jawnej decyzji klienta.
 
 ## Rollout i rollback
 
@@ -54,4 +63,3 @@ Rollout wymaga migracji addytywnej, testów contract/API/Frappe, próby Guest i
 Website User, kontroli mobilnej oraz backupu produkcyjnego. Rollback aplikacji
 nie usuwa tabeli ani zgłoszeń. W razie incydentu usuwa się link do formularza i
 blokuje metodę na reverse proxy/aplikacji; danych nie kasuje się ad hoc.
-

@@ -127,8 +127,8 @@ def accept_repair_intake(
 			"stan_przy_przyjeciu": doc.condition_description,
 			"sposob_dostarczenia": _legacy_delivery(doc.delivery_method),
 			"sposob_odbioru": _legacy_delivery(doc.return_method),
-			"powiadom_sms": 1 if doc.phone else 0,
-			"powiadom_email": 1 if doc.email else 0,
+			"powiadom_sms": 0,
+			"powiadom_email": 0,
 		}
 	)
 	repair.insert()
