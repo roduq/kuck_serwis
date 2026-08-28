@@ -36,6 +36,16 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Nowe zgłoszenia online",
+   "link_count": 0,
+   "link_to": "Kuck Repair Intake",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Przyjęcie zbiorcze",
    "link_count": 0,
    "link_to": "Przyjecie Zbiorcze",
@@ -161,6 +171,13 @@
  "roles": [],
  "sequence_id": 1.0,
  "shortcuts": [
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Nowe zgłoszenia online",
+   "link_to": "Kuck Repair Intake",
+   "type": "DocType"
+  },
   {
    "color": "Purple",
    "doc_view": "List",

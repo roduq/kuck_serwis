@@ -1,0 +1,231 @@
+.repair-intake {
+	--repair-ink: var(--ks-color-ink, #171717);
+	--repair-accent: var(--ks-color-accent, #171717);
+	--repair-line: var(--ks-color-border, #d7d7d7);
+	--repair-soft: var(--ks-color-surface-muted, #f6f6f4);
+	width: min(100%, 920px);
+	margin: 0 auto 5rem;
+	color: var(--repair-ink);
+}
+
+.repair-intake__intro {
+	max-width: 760px;
+	margin: 2rem auto 2.5rem;
+	text-align: center;
+}
+
+.repair-intake__eyebrow {
+	margin-bottom: 0.45rem;
+	color: var(--repair-accent);
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.repair-intake h1 {
+	margin-bottom: 0.75rem;
+	font-size: clamp(2rem, 5vw, 3.35rem);
+	line-height: 1.05;
+}
+
+.repair-intake__account-note {
+	margin: 1.25rem auto 0;
+	padding: 0.9rem 1rem;
+	border-left: 3px solid var(--repair-accent);
+	background: var(--repair-soft);
+	text-align: left;
+}
+
+.repair-intake__form > fieldset {
+	margin: 0 0 1.25rem;
+	padding: clamp(1.1rem, 3vw, 2rem);
+	border: 1px solid var(--repair-line);
+	border-radius: var(--ks-radius-card, 0.25rem);
+	background: #fff;
+}
+
+.repair-intake__form > fieldset > legend {
+	width: auto;
+	margin: 0 0 1.25rem;
+	padding: 0;
+	font-size: 1.25rem;
+	font-weight: 700;
+}
+
+.repair-intake__form > fieldset > legend span {
+	display: inline-grid;
+	width: 2rem;
+	height: 2rem;
+	margin-right: 0.45rem;
+	place-items: center;
+	border-radius: 50%;
+	background: var(--repair-ink);
+	color: #fff;
+	font-size: 0.9rem;
+}
+
+.repair-intake__grid,
+.repair-intake__choice-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1.1rem;
+}
+
+.repair-intake__field--wide {
+	grid-column: 1 / -1;
+}
+
+.repair-intake__field {
+	margin-bottom: 1rem;
+}
+
+.repair-intake__field label,
+.repair-intake__choice legend {
+	display: block;
+	margin-bottom: 0.4rem;
+	font-weight: 650;
+}
+
+.repair-intake input:not([type="radio"]):not([type="checkbox"]),
+.repair-intake textarea {
+	width: 100%;
+	min-height: 46px;
+	padding: 0.7rem 0.8rem;
+	border: 1px solid #8ba0ad;
+	border-radius: 0.35rem;
+	background: #fff;
+	color: #132f3f;
+}
+
+.repair-intake textarea {
+	resize: vertical;
+}
+
+.repair-intake input:focus-visible,
+.repair-intake textarea:focus-visible,
+.repair-intake button:focus-visible,
+.repair-intake a:focus-visible {
+	outline: 3px solid var(--ks-color-focus, #005fcc);
+	outline-offset: 2px;
+}
+
+.repair-intake small {
+	display: block;
+	margin-top: 0.35rem;
+	color: #4c6473;
+}
+
+.repair-intake__choice {
+	min-width: 0;
+	margin: 0.5rem 0 1rem;
+	padding: 0;
+	border: 0;
+}
+
+.repair-intake__choice label {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 0.65rem;
+	margin: 0.2rem 0;
+	cursor: pointer;
+}
+
+.repair-intake__choice input,
+.repair-intake__consent input {
+	width: 1.25rem;
+	height: 1.25rem;
+	flex: 0 0 auto;
+}
+
+.repair-intake__shipping {
+	margin-top: 1rem;
+	padding: 1rem;
+	border-left: 3px solid var(--repair-accent);
+	background: var(--repair-soft);
+}
+
+.repair-intake__money {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 0.65rem;
+}
+
+.repair-intake__money span {
+	font-weight: 700;
+}
+
+.repair-intake__consent {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.75rem;
+	line-height: 1.5;
+}
+
+.repair-intake__privacy-note,
+.repair-intake__warning {
+	margin: 0.85rem 0;
+}
+
+.repair-intake__required-note {
+	margin: 0 0 0.75rem;
+	color: #4c6473;
+	font-size: 0.9rem;
+}
+
+.repair-intake__submit {
+	min-height: 48px;
+	padding: 0.75rem 1.4rem;
+}
+
+.repair-intake__error,
+.repair-intake__success {
+	margin: 1rem 0 1.5rem;
+	padding: 1.1rem 1.25rem;
+	border-radius: 0.5rem;
+}
+
+.repair-intake__error {
+	border: 1px solid #b42318;
+	background: #fff1f0;
+	color: #7a271a;
+}
+
+.repair-intake__success {
+	border: 1px solid #238636;
+	background: #effaf1;
+}
+
+.repair-intake__honeypot {
+	position: absolute !important;
+	left: -10000px !important;
+	width: 1px !important;
+	height: 1px !important;
+	overflow: hidden !important;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+@media (max-width: 700px) {
+	.repair-intake {
+		margin-bottom: 3rem;
+	}
+
+	.repair-intake__intro {
+		margin-top: 1rem;
+		text-align: left;
+	}
+
+	.repair-intake__grid,
+	.repair-intake__choice-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.repair-intake__field--wide {
+		grid-column: auto;
+	}
+}

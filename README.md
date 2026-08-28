@@ -26,6 +26,10 @@ wygodę recepcji — szybkie przyjęcie, czytelny status, jak najmniej klikania 
   Dostępna ze skrótu w obszarze roboczym oraz przyciskiem „Karta klienta" na formularzu naprawy
   i klienta. Na formularzu **Customer** dochodzi też grupa powiązań **Serwis → Naprawa**.
 - Rola **Serwis** dla zespołu warsztatu.
+- **Publiczne zgłoszenie naprawy** (`/serwis/zglos-naprawe`) dla gościa i
+  zalogowanego klienta. Zapis trafia do prywatnej kolejki `Kuck Repair Intake`;
+  standardowa `Naprawa` powstaje dopiero po przypisaniu klienta i potwierdzeniu
+  fizycznego przyjęcia zegarka. Formularz nie uruchamia płatności ani wysyłki.
 
 #### Konfiguracja po instalacji
 

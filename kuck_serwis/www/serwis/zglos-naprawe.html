@@ -1,0 +1,144 @@
+{% extends "templates/web.html" %}
+
+{% block head_include %}
+{{ super() }}
+<meta name="csrf-token" content="{{ csrf_token | e }}">
+<link rel="stylesheet" href="/assets/kuck_serwis/css/repair_intake.css">
+{% endblock %}
+
+{% block header %}{% endblock %}
+
+{% block page_content %}
+<main class="repair-intake" id="main-content">
+	<header class="repair-intake__intro">
+		<p class="repair-intake__eyebrow">Serwis zegarków Kuck</p>
+		<h1>Zgłoś naprawę zegarka</h1>
+		<p>Opisz zegarek i usterkę. Po otrzymaniu zgłoszenia skontaktujemy się, aby ustalić dalsze kroki.</p>
+		{% if prefill.linked_to_account %}
+		<p class="repair-intake__account-note">Zgłoszenie zostanie bezpiecznie powiązane z Twoim kontem po weryfikacji przez serwis.</p>
+		{% elif frappe.session.user == "Guest" %}
+		<p class="repair-intake__account-note">Masz konto? <a href="/login?redirect-to=/serwis/zglos-naprawe">Zaloguj się</a>, aby ułatwić powiązanie zgłoszenia z historią napraw.</p>
+		{% endif %}
+	</header>
+
+	<div class="repair-intake__success" id="repair-intake-success" role="status" tabindex="-1" hidden>
+		<h2>Zgłoszenie zostało przekazane</h2>
+		<p>Dziękujemy. Skontaktujemy się z Tobą, aby ustalić następny krok.</p>
+		<p><strong>Nie wysyłaj zegarka przed otrzymaniem instrukcji.</strong></p>
+		{% if frappe.session.user != "Guest" %}<p>Zgłoszenie nie pojawi się jeszcze w historii napraw — zobaczysz je tam po przyjęciu zegarka przez serwis.</p>{% endif %}
+	</div>
+
+	<div class="repair-intake__error" id="repair-intake-errors" role="alert" tabindex="-1" hidden></div>
+
+	<form id="repair-intake-form" class="repair-intake__form" novalidate>
+		<p class="repair-intake__required-note"><span aria-hidden="true">*</span> Pola wymagane</p>
+		<fieldset>
+			<legend><span>1</span> Dane kontaktowe</legend>
+			<div class="repair-intake__grid">
+				<div class="repair-intake__field repair-intake__field--wide">
+					<label for="full-name">Imię i nazwisko <span aria-hidden="true">*</span></label>
+					<input id="full-name" name="full_name" autocomplete="name" maxlength="120" minlength="2" required value="{{ prefill.full_name | e }}">
+				</div>
+				<div class="repair-intake__field">
+					<label for="phone">Telefon <span aria-hidden="true">*</span></label>
+					<input id="phone" name="phone" type="tel" autocomplete="tel" maxlength="32" minlength="6" required value="{{ prefill.phone | e }}" aria-describedby="phone-help">
+					<small id="phone-help">Użyjemy go wyłącznie w sprawie tego zgłoszenia.</small>
+				</div>
+				<div class="repair-intake__field">
+					<label for="email">E-mail <span aria-hidden="true">*</span></label>
+					<input id="email" name="email" type="email" autocomplete="email" maxlength="254" required value="{{ prefill.email | e }}" aria-describedby="email-help">
+					<small id="email-help">Skontaktujemy się z Tobą w sprawie dalszych kroków.</small>
+				</div>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend><span>2</span> Zegarek</legend>
+			<div class="repair-intake__grid">
+				<div class="repair-intake__field">
+					<label for="brand">Marka <span aria-hidden="true">*</span></label>
+					<input id="brand" name="brand" maxlength="80" required autocomplete="off">
+				</div>
+				<div class="repair-intake__field">
+					<label for="model">Model <span aria-hidden="true">*</span></label>
+					<input id="model" name="model" maxlength="120" required autocomplete="off">
+				</div>
+				<div class="repair-intake__field">
+					<label for="serial-number">Numer seryjny / numer koperty</label>
+					<input id="serial-number" name="serial_number" maxlength="120" autocomplete="off" aria-describedby="serial-help">
+					<small id="serial-help">Jeśli jest dostępny.</small>
+				</div>
+				<div class="repair-intake__field">
+					<label for="purchase-date">Data zakupu</label>
+					<input id="purchase-date" name="purchase_date" type="date" autocomplete="off">
+				</div>
+			</div>
+			<fieldset class="repair-intake__choice">
+				<legend>Czy zgłoszenie dotyczy gwarancji? <span aria-hidden="true">*</span></legend>
+				<label><input type="radio" name="warranty" value="true" required> Tak</label>
+				<label><input type="radio" name="warranty" value="false" required> Nie</label>
+				<small>Gwarancję zweryfikuje serwis.</small>
+			</fieldset>
+		</fieldset>
+
+		<fieldset>
+			<legend><span>3</span> Usterka</legend>
+			<div class="repair-intake__field">
+				<label for="issue-description">Opisz problem <span aria-hidden="true">*</span></label>
+				<textarea id="issue-description" name="issue_description" rows="6" minlength="10" maxlength="2000" required aria-describedby="issue-help"></textarea>
+				<small id="issue-help">Minimum 10 znaków. Napisz, co nie działa, kiedy usterka występuje i od kiedy.</small>
+			</div>
+			<div class="repair-intake__field">
+				<label for="condition-description">Widoczny stan zegarka</label>
+				<textarea id="condition-description" name="condition_description" rows="3" maxlength="1000" aria-describedby="condition-help"></textarea>
+				<small id="condition-help">Opcjonalnie: rysy, wgniecenia, brakujące elementy.</small>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend><span>4</span> Przekazanie i odbiór</legend>
+			<div class="repair-intake__choice-grid">
+				<fieldset class="repair-intake__choice">
+					<legend>Jak chcesz przekazać zegarek? <span aria-hidden="true">*</span></legend>
+					<label><input type="radio" name="delivery_method" value="SALON" required> W wybranym salonie — szczegóły ustalimy telefonicznie</label>
+					<label><input type="radio" name="delivery_method" value="COURIER" required> Wysyłkowo</label>
+				</fieldset>
+				<fieldset class="repair-intake__choice">
+					<legend>Jak chcesz odebrać zegarek? <span aria-hidden="true">*</span></legend>
+					<label><input type="radio" name="return_method" value="SALON" required> W wybranym salonie — szczegóły ustalimy telefonicznie</label>
+					<label><input type="radio" name="return_method" value="COURIER" required> Wysyłkowo</label>
+				</fieldset>
+			</div>
+			<div class="repair-intake__shipping" id="shipping-details" hidden>
+				<div class="repair-intake__field">
+					<label for="declared-value">Deklarowana wartość zegarka <span aria-hidden="true">*</span></label>
+					<div class="repair-intake__money"><input id="declared-value" name="declared_value" inputmode="decimal" min="0.01" max="10000" step="0.01" type="number" aria-describedby="value-help"><span>PLN</span></div>
+					<small id="value-help">Maksymalnie 10 000 PLN. Wartość służy do dalszej obsługi przesyłki i ubezpieczenia.</small>
+				</div>
+				<p>Po przyjęciu zgłoszenia ustalimy adres i przekażemy dalsze instrukcje. Etykieta ani płatność nie są jeszcze tworzone.</p>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend><span>5</span> Prywatność i wysłanie</legend>
+			<label class="repair-intake__consent">
+				<input type="checkbox" name="privacy_accepted" required>
+				<span>Zapoznałem/-am się z <a href="/polityka-prywatnosci" target="_blank" rel="noopener">polityką prywatności</a> w związku ze zgłoszeniem naprawy. <span aria-hidden="true">*</span></span>
+			</label>
+			<p class="repair-intake__privacy-note">Dane wykorzystamy do obsługi zgłoszenia i kontaktu w jego sprawie.</p>
+			<div class="repair-intake__honeypot" aria-hidden="true">
+				<label for="website">Strona internetowa</label>
+				<input id="website" name="website" tabindex="-1" autocomplete="off">
+			</div>
+			<button class="btn btn-primary repair-intake__submit" type="submit">Wyślij zgłoszenie</button>
+			<p class="repair-intake__warning"><strong>Nie wysyłaj zegarka przed otrzymaniem dalszych instrukcji.</strong></p>
+		</fieldset>
+	</form>
+	<noscript><p class="repair-intake__error">Do bezpiecznego wysłania formularza potrzebna jest obsługa JavaScript. Możesz też skontaktować się bezpośrednio z serwisem.</p></noscript>
+</main>
+{% endblock %}
+
+{% block script %}
+{{ super() }}
+<script src="/assets/kuck_serwis/js/repair_intake.js" defer></script>
+{% endblock %}
