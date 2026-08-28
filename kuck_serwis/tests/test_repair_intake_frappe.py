@@ -115,12 +115,13 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 			intake.save()
 
 	def test_guest_form_renders_without_disclosing_internal_identity(self):
+		site = frappe.local.site
 		with patch("frappe.app.get_response", get_response_without_exception_handling):
 			with ThreadPoolExecutor(max_workers=1) as executor:
 				response = executor.submit(
 					get_test_client().get,
 					"/serwis/zglos-naprawe",
-					base_url="http://kuck.localhost",
+					base_url=f"http://{site}",
 				).result(timeout=10)
 		self.assertEqual(response.status_code, 200)
 		html = response.get_data(as_text=True)
