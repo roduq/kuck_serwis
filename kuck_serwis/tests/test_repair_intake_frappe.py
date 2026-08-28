@@ -116,7 +116,10 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 
 	def test_guest_form_renders_without_disclosing_internal_identity(self):
 		site = frappe.local.site
-		with patch("frappe.app.get_response", get_response_without_exception_handling):
+		with (
+			patch("frappe.app.get_response", get_response_without_exception_handling),
+			patch("frappe.utils.get_assets_json", return_value={}),
+		):
 			with ThreadPoolExecutor(max_workers=1) as executor:
 				response = executor.submit(
 					get_test_client().get,
