@@ -9,10 +9,10 @@
 {% block header %}{% endblock %}
 
 {% block page_content %}
-<main class="repair-intake" id="main-content">
+<section class="repair-intake" aria-labelledby="repair-intake-title">
 	<header class="repair-intake__intro">
 		<p class="repair-intake__eyebrow">Serwis zegarków Kuck</p>
-		<h1>Zgłoś naprawę zegarka</h1>
+		<h1 id="repair-intake-title">Zgłoś naprawę zegarka</h1>
 		<p>Opisz zegarek i usterkę. Po otrzymaniu zgłoszenia skontaktujemy się, aby ustalić dalsze kroki.</p>
 		{% if prefill.linked_to_account %}
 		<p class="repair-intake__account-note">Zgłoszenie zostanie bezpiecznie powiązane z Twoim kontem po weryfikacji przez serwis.</p>
@@ -30,7 +30,9 @@
 
 	<div class="repair-intake__error" id="repair-intake-errors" role="alert" tabindex="-1" hidden></div>
 
-	<form id="repair-intake-form" class="repair-intake__form" novalidate>
+	<noscript><p class="repair-intake__error">Do bezpiecznego wysłania formularza potrzebna jest obsługa JavaScript. Możesz też skontaktować się bezpośrednio z serwisem.</p></noscript>
+
+	<form id="repair-intake-form" class="repair-intake__form" action="/serwis/zglos-naprawe" method="post" novalidate>
 		<p class="repair-intake__required-note"><span aria-hidden="true">*</span> Pola wymagane</p>
 		<fieldset>
 			<legend><span>1</span> Dane kontaktowe</legend>
@@ -130,12 +132,11 @@
 				<label for="website">Strona internetowa</label>
 				<input id="website" name="website" tabindex="-1" autocomplete="off">
 			</div>
-			<button class="btn btn-primary repair-intake__submit" type="submit">Wyślij zgłoszenie</button>
+			<button class="btn btn-primary repair-intake__submit" type="submit" disabled>Wyślij zgłoszenie</button>
 			<p class="repair-intake__warning"><strong>Nie wysyłaj zegarka przed otrzymaniem dalszych instrukcji.</strong></p>
 		</fieldset>
 	</form>
-	<noscript><p class="repair-intake__error">Do bezpiecznego wysłania formularza potrzebna jest obsługa JavaScript. Możesz też skontaktować się bezpośrednio z serwisem.</p></noscript>
-</main>
+</section>
 {% endblock %}
 
 {% block script %}

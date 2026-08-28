@@ -80,6 +80,12 @@
 		submit.disabled = true;
 		return;
 	}
+	if (!csrf) {
+		showError(
+			"Nie udało się przygotować bezpiecznego formularza. Odśwież stronę i spróbuj ponownie."
+		);
+		return;
+	}
 
 	form.addEventListener("change", (event) => {
 		if (["delivery_method", "return_method"].includes(event.target.name)) updateShipping();
@@ -89,12 +95,6 @@
 		event.preventDefault();
 		clearError();
 		if (!form.reportValidity()) return;
-		if (!csrf) {
-			showError(
-				"Nie udało się przygotować bezpiecznego formularza. Odśwież stronę i spróbuj ponownie."
-			);
-			return;
-		}
 		submit.disabled = true;
 		submit.textContent = "Wysyłanie…";
 		try {
@@ -123,4 +123,5 @@
 	});
 
 	updateShipping();
+	submit.disabled = false;
 })();

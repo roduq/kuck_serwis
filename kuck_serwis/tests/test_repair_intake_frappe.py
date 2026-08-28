@@ -132,8 +132,15 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.headers.getlist("Content-Security-Policy"), [CSP])
 		html = response.get_data(as_text=True)
-		self.assertEqual(html.count("<h1>"), 1)
-		self.assertIn('id="repair-intake-form"', html)
+		self.assertEqual(html.count("<h1"), 1)
+		self.assertEqual(html.count("<main"), 1)
+		self.assertIn('aria-labelledby="repair-intake-title"', html)
+		self.assertIn(
+			'id="repair-intake-form" class="repair-intake__form" '
+			'action="/serwis/zglos-naprawe" method="post" novalidate',
+			html,
+		)
+		self.assertIn('class="btn btn-primary repair-intake__submit" type="submit" disabled', html)
 		self.assertIn(f'href="{PRIVACY_URL}"', html)
 		self.assertNotIn("RIN-", html)
 
