@@ -180,7 +180,7 @@ def accept_repair_intake(
 	transfer_files = tuple(_exact_intake_photo_file(doc.name, row) for row in doc.photos or ())
 	repair.insert()
 	for position, (row, source_file) in enumerate(zip(doc.photos or (), transfer_files, strict=True), 1):
-		content = source_file.get_content()
+		content = source_file.get_content(encodings=())
 		if type(content) is not bytes or hashlib.sha256(content).hexdigest() != row.content_sha256:
 			frappe.throw("REPAIR_INTAKE_PHOTO_CONTENT_INVALID", frappe.ValidationError)
 		binding = _digest("photo-copy", repair.name, str(position), row.content_sha256)
