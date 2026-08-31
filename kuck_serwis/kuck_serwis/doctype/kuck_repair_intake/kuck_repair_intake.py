@@ -67,7 +67,7 @@ class KuckRepairIntake(Document):
 					and self.flags.get("repair_intake_photo_initialization")
 				):
 					frappe.throw("REPAIR_INTAKE_SUBMISSION_IMMUTABLE")
-			if self.as_dict().get("photos") != previous.as_dict().get("photos") and not self.flags.get(
+			if _photo_snapshot(self.photos) != _photo_snapshot(previous.photos) and not self.flags.get(
 				"repair_intake_photo_initialization"
 			):
 				frappe.throw("REPAIR_INTAKE_PHOTOS_IMMUTABLE")
@@ -123,3 +123,17 @@ class KuckRepairIntake(Document):
 			).hexdigest()
 			if self.photo_manifest_sha256 != manifest:
 				frappe.throw("REPAIR_INTAKE_PHOTO_MANIFEST_INVALID")
+
+
+def _photo_snapshot(rows):
+	return tuple(
+		(
+			row.photo,
+			row.content_sha256,
+			int(row.width or 0),
+			int(row.height or 0),
+			row.normalizer_version,
+			row.scan_status,
+		)
+		for row in rows or ()
+	)

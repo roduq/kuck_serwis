@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import io
 import unittest
+from types import SimpleNamespace
 
 from PIL import Image
 
+from kuck_serwis.kuck_serwis.doctype.kuck_repair_intake.kuck_repair_intake import _photo_snapshot
 from kuck_serwis.repair_intake_photo import (
 	MAX_INPUT_BYTES,
 	RepairIntakePhotoError,
@@ -76,6 +78,27 @@ class TestRepairIntakePhoto(unittest.TestCase):
 
 		self.assertNotEqual(frappe_reencode(first), frappe_reencode(source.body))
 		self.assertNotEqual(frappe_reencode(first), frappe_reencode(second))
+
+	def test_immutable_snapshot_uses_only_ordered_photo_contract_fields(self):
+		def row(photo, internal):
+			return SimpleNamespace(
+				photo=photo,
+				content_sha256="a" * 64,
+				width="160",
+				height=90,
+				normalizer_version="1",
+				scan_status="NOT_SCANNED",
+				modified=internal,
+			)
+
+		self.assertEqual(
+			_photo_snapshot([row("/private/files/a.jpg", 1)]),
+			_photo_snapshot([row("/private/files/a.jpg", 2)]),
+		)
+		self.assertNotEqual(
+			_photo_snapshot([row("/private/files/a.jpg", 1), row("/private/files/b.jpg", 1)]),
+			_photo_snapshot([row("/private/files/b.jpg", 1), row("/private/files/a.jpg", 1)]),
+		)
 
 
 if __name__ == "__main__":
