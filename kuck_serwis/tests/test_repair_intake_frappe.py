@@ -46,6 +46,7 @@ def _make_intake(*, customer=None, suffix=None):
 			"brand_declared": "Testowa Marka",
 			"model_declared": "Model Testowy",
 			"serial_number": "SERIAL-TEST",
+			"purchase_date": "2026-08-31",
 			"issue_description": "Zegarek zatrzymuje się podczas normalnego użytkowania.",
 			"condition_description": "Rysa na zapięciu.",
 			"warranty_claim": 0,

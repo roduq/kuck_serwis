@@ -101,6 +101,9 @@ def submit_repair_intake(payload: object = None, idempotency_key: object = None)
 		if existing:
 			return _replay(existing, fingerprint, legacy_fingerprint)
 		raise
+	# Reload database-canonical field types (notably Date) before the guarded
+	# photo initialization save compares this document with its stored snapshot.
+	doc.reload()
 	# Never catch failures below: Frappe rolls the request transaction back, and
 	# every File insert registers File.on_rollback to remove its private blob.
 	stored_hashes = []

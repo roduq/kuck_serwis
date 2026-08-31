@@ -42,6 +42,9 @@ class FakeDoc:
 			"values": dict(self.values),
 		}
 
+	def reload(self):
+		return self
+
 
 class FakeDB:
 	def __init__(self):
