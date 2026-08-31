@@ -60,7 +60,8 @@ def _make_intake(*, customer=None, suffix=None):
 		}
 	)
 	doc.flags.public_repair_intake = True
-	return doc.insert(ignore_permissions=True)
+	doc.insert(ignore_permissions=True)
+	return doc.reload()
 
 
 def _add_intake_photos(intake, count=3):
