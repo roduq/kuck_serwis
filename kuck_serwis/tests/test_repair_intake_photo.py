@@ -62,11 +62,20 @@ class TestRepairIntakePhoto(unittest.TestCase):
 		second = bind_normalized_photo_to_repair(source.body, "b" * 64)
 		self.assertNotEqual(first, source.body)
 		self.assertNotEqual(first, second)
-		self.assertTrue(first.startswith(b"\xff\xd8\xff\xfe"))
+		self.assertTrue(first.startswith(b"\xff\xd8\xff"))
 		self.assertTrue(first.endswith(b"\xff\xd9"))
 		with Image.open(io.BytesIO(first)) as image:
 			image.load()
 			self.assertEqual(image.format, "JPEG")
+
+		def frappe_reencode(body):
+			with Image.open(io.BytesIO(body)) as image:
+				output = io.BytesIO()
+				image.save(output, "JPEG", exif=b"")
+				return output.getvalue()
+
+		self.assertNotEqual(frappe_reencode(first), frappe_reencode(source.body))
+		self.assertNotEqual(frappe_reencode(first), frappe_reencode(second))
 
 
 if __name__ == "__main__":

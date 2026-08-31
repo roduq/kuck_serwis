@@ -22,6 +22,7 @@ from kuck_serwis.repair_intake_photo import (
 	bind_normalized_photo_to_repair,
 	media_fingerprint,
 	normalize_uploaded_photos,
+	photo_manifest_from_hashes,
 )
 from kuck_serwis.repair_intake_security import request_actor_scope, require_write_request
 
@@ -102,6 +103,7 @@ def submit_repair_intake(payload: object = None, idempotency_key: object = None)
 		raise
 	# Never catch failures below: Frappe rolls the request transaction back, and
 	# every File insert registers File.on_rollback to remove its private blob.
+	stored_hashes = []
 	for photo in photos:
 		attachment = frappe.get_doc(
 			{
@@ -114,11 +116,16 @@ def submit_repair_intake(payload: object = None, idempotency_key: object = None)
 				"attached_to_field": "photos",
 			}
 		).insert(ignore_permissions=True)
+		stored_content = frappe.get_doc("File", attachment.name).get_content(encodings=())
+		if type(stored_content) is not bytes:
+			frappe.throw("REPAIR_INTAKE_PHOTO_STORAGE_INVALID", frappe.ValidationError)
+		stored_hash = hashlib.sha256(stored_content).hexdigest()
+		stored_hashes.append(stored_hash)
 		doc.append(
 			"photos",
 			{
 				"photo": attachment.file_url,
-				"content_sha256": photo.sha256,
+				"content_sha256": stored_hash,
 				"width": photo.width,
 				"height": photo.height,
 				"normalizer_version": "1",
@@ -127,7 +134,7 @@ def submit_repair_intake(payload: object = None, idempotency_key: object = None)
 		)
 	if photos:
 		doc.photo_count = len(photos)
-		doc.photo_manifest_sha256 = media_fingerprint(photos)
+		doc.photo_manifest_sha256 = photo_manifest_from_hashes(tuple(stored_hashes))
 		doc.flags.repair_intake_photo_initialization = True
 		doc.save(ignore_permissions=True)
 	frappe.logger("repair_intake", allow_site=True).info(

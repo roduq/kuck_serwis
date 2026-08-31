@@ -13,7 +13,7 @@ from PIL import Image
 
 from kuck_serwis import repair_intake
 from kuck_serwis.repair_intake_contract import PRIVACY_PROOF_SHA256, PRIVACY_REVISION, PRIVACY_URL
-from kuck_serwis.repair_intake_photo import media_fingerprint, normalize_intake_photo
+from kuck_serwis.repair_intake_photo import normalize_intake_photo, photo_manifest_from_hashes
 from kuck_serwis.www.serwis.zglos_naprawe import CSP
 
 
@@ -79,20 +79,22 @@ def _add_intake_photos(intake, count=3):
 				"attached_to_field": "photos",
 			}
 		).insert(ignore_permissions=True)
+		stored_content = frappe.get_doc("File", attachment.name).get_content(encodings=())
+		stored_hash = hashlib.sha256(stored_content).hexdigest()
 		intake.append(
 			"photos",
 			{
 				"photo": attachment.file_url,
-				"content_sha256": photo.sha256,
+				"content_sha256": stored_hash,
 				"width": photo.width,
 				"height": photo.height,
 				"normalizer_version": "1",
 				"scan_status": "NOT_SCANNED",
 			},
 		)
-		photos.append(photo)
+		photos.append(stored_hash)
 	intake.photo_count = count
-	intake.photo_manifest_sha256 = media_fingerprint(tuple(photos)) if photos else None
+	intake.photo_manifest_sha256 = photo_manifest_from_hashes(tuple(photos)) if photos else None
 	intake.flags.repair_intake_photo_initialization = True
 	intake.save(ignore_permissions=True)
 	return intake.reload()

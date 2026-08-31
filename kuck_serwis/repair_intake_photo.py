@@ -8,7 +8,10 @@ import stat
 import subprocess
 import sys
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 from kuck_serwis.repair_photo_content import RepairPhotoMime, _validate_container
 
@@ -83,7 +86,7 @@ def normalize_intake_photo(body: object) -> NormalizedIntakePhoto:
 
 
 def bind_normalized_photo_to_repair(body: object, binding: object) -> bytes:
-	"""Add one non-sensitive server binding so Frappe cannot deduplicate repair evidence URLs."""
+	"""Encode a tiny pixel binding so Frappe cannot deduplicate repair evidence URLs."""
 
 	if (
 		type(body) is not bytes
@@ -96,9 +99,32 @@ def bind_normalized_photo_to_repair(body: object, binding: object) -> bytes:
 		_validate_container(body, RepairPhotoMime.JPEG)
 	except ValueError:
 		raise RepairIntakePhotoError("REPAIR_INTAKE_PHOTO_INVALID") from None
-	comment = f"KUCK_REPAIR_V1:{binding}".encode("ascii")
-	segment = b"\xff\xfe" + (len(comment) + 2).to_bytes(2, "big") + comment
-	bound = body[:2] + segment + body[2:]
+	try:
+		with Image.open(BytesIO(body), formats=["JPEG"]) as source:
+			source.load()
+			image = source.convert("RGB")
+		digest = bytes.fromhex(binding)
+		block = 2
+		columns = min(32, max(1, image.width // block))
+		rows = (len(digest) + columns - 1) // columns
+		width = max(image.width, columns * block)
+		height = max(image.height, rows * block)
+		canvas = Image.new("RGB", (width, height), "white")
+		canvas.paste(image, (0, 0))
+		pixels = canvas.load()
+		start_y = height - rows * block
+		for index, value in enumerate(digest):
+			x = (index % columns) * block
+			y = start_y + (index // columns) * block
+			color = (value, value ^ 0x5A, 255 - value)
+			for offset_x in range(block):
+				for offset_y in range(block):
+					pixels[x + offset_x, y + offset_y] = color
+		output = BytesIO()
+		canvas.save(output, "JPEG", quality=88, optimize=True, progressive=False)
+		bound = output.getvalue()
+	except (OSError, ValueError):
+		raise RepairIntakePhotoError("REPAIR_INTAKE_PHOTO_INVALID") from None
 	try:
 		_validate_container(bound, RepairPhotoMime.JPEG)
 	except ValueError:
@@ -124,5 +150,14 @@ def normalize_uploaded_photos(files: object) -> tuple[NormalizedIntakePhoto, ...
 
 
 def media_fingerprint(photos: tuple[NormalizedIntakePhoto, ...]) -> str:
-	manifest = "\0".join(photo.sha256 for photo in photos)
+	return photo_manifest_from_hashes(tuple(photo.sha256 for photo in photos))
+
+
+def photo_manifest_from_hashes(hashes: tuple[str, ...]) -> str:
+	if type(hashes) is not tuple or any(
+		type(value) is not str or len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
+		for value in hashes
+	):
+		raise RepairIntakePhotoError("REPAIR_INTAKE_PHOTO_INVALID")
+	manifest = "\0".join(hashes)
 	return hashlib.sha256(f"kuck.repair-intake.photos.v1\0{manifest}".encode()).hexdigest()
