@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
@@ -8,9 +9,11 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import get_test_client
 from frappe.website.serve import get_response_without_exception_handling
+from PIL import Image
 
 from kuck_serwis import repair_intake
 from kuck_serwis.repair_intake_contract import PRIVACY_PROOF_SHA256, PRIVACY_REVISION, PRIVACY_URL
+from kuck_serwis.repair_intake_photo import media_fingerprint, normalize_intake_photo
 from kuck_serwis.www.serwis.zglos_naprawe import CSP
 
 
@@ -57,6 +60,42 @@ def _make_intake(*, customer=None, suffix=None):
 	)
 	doc.flags.public_repair_intake = True
 	return doc.insert(ignore_permissions=True)
+
+
+def _add_intake_photos(intake, count=3):
+	photos = []
+	for index in range(count):
+		body = io.BytesIO()
+		Image.new("RGB", (120 + index, 80), (20 + index, 40, 60)).save(body, "PNG")
+		photo = normalize_intake_photo(body.getvalue())
+		attachment = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"test-intake-{frappe.generate_hash(length=8)}.jpg",
+				"is_private": 1,
+				"content": photo.body,
+				"attached_to_doctype": repair_intake.DOCTYPE,
+				"attached_to_name": intake.name,
+				"attached_to_field": "photos",
+			}
+		).insert(ignore_permissions=True)
+		intake.append(
+			"photos",
+			{
+				"photo": attachment.file_url,
+				"content_sha256": photo.sha256,
+				"width": photo.width,
+				"height": photo.height,
+				"normalizer_version": "1",
+				"scan_status": "NOT_SCANNED",
+			},
+		)
+		photos.append(photo)
+	intake.photo_count = count
+	intake.photo_manifest_sha256 = media_fingerprint(tuple(photos)) if photos else None
+	intake.flags.repair_intake_photo_initialization = True
+	intake.save(ignore_permissions=True)
+	return intake.reload()
 
 
 class TestRepairIntakeFrappe(IntegrationTestCase):
@@ -117,6 +156,54 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			intake.save()
 
+	def test_private_photos_are_immutable_and_copy_to_repair_in_order(self):
+		customer = _make_customer()
+		intake = _add_intake_photos(_make_intake(customer=customer.name))
+		original_urls = [row.photo for row in intake.photos]
+		for url in original_urls:
+			self.assertEqual(
+				frappe.db.count(
+					"File",
+					{
+						"file_url": url,
+						"is_private": 1,
+						"attached_to_doctype": repair_intake.DOCTYPE,
+						"attached_to_name": intake.name,
+						"attached_to_field": "photos",
+					},
+				),
+				1,
+			)
+		intake.photos.pop()
+		with self.assertRaises(frappe.ValidationError):
+			intake.save()
+		intake.reload()
+		result = repair_intake.accept_repair_intake(intake.name, str(intake.modified), True)
+		repair = frappe.get_doc("Naprawa", result["repair"])
+		repair_urls = [row.zdjecie for row in repair.zdjecia]
+		self.assertEqual(len(repair_urls), 3)
+		self.assertTrue(set(repair_urls).isdisjoint(original_urls))
+		self.assertEqual([row.source_intake_position for row in repair.zdjecia], [1, 2, 3])
+		self.assertTrue(all(row.source_intake == intake.name for row in repair.zdjecia))
+		self.assertEqual(
+			[row.source_content_sha256 for row in repair.zdjecia],
+			[row.content_sha256 for row in intake.photos],
+		)
+		for url in repair_urls:
+			self.assertEqual(
+				frappe.db.count(
+					"File",
+					{
+						"file_url": url,
+						"is_private": 1,
+						"attached_to_doctype": "Naprawa",
+						"attached_to_name": repair.name,
+						"attached_to_field": "zdjecie",
+					},
+				),
+				1,
+			)
+
 	def test_guest_form_renders_without_disclosing_internal_identity(self):
 		site = frappe.local.site
 		with (
@@ -141,6 +228,11 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 			html,
 		)
 		self.assertIn('class="btn btn-primary repair-intake__submit" type="submit" disabled', html)
+		self.assertIn(
+			'id="repair-photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple',
+			html,
+		)
+		self.assertIn("maksymalnie 3 zdjęcia", html)
 		self.assertIn(f'href="{PRIVACY_URL}"', html)
 		self.assertNotIn("RIN-", html)
 

@@ -7,7 +7,10 @@
  "engine": "InnoDB",
  "field_order": [
   "zdjecie",
-  "opis"
+  "opis",
+  "source_intake",
+  "source_intake_position",
+  "source_content_sha256"
  ],
  "fields": [
   {
@@ -22,6 +25,28 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Opis"
+  },
+  {
+   "fieldname": "source_intake",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Źródłowe zgłoszenie",
+   "options": "Kuck Repair Intake",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_intake_position",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Pozycja w zgłoszeniu",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_content_sha256",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "SHA-256 źródła",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

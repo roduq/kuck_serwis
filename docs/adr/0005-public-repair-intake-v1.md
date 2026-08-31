@@ -18,7 +18,7 @@ przyjęcie zegarka. Publiczny formularz nie może więc bezpośrednio tworzyć
    zalogowanego użytkownika oraz prywatny DocType `Kuck Repair Intake`.
 2. Formularz zbiera dane kontaktowe, identyfikację i stan zegarka, opis usterki,
    deklarację gwarancji, sposób dostarczenia/odbioru oraz — dla wysyłki — wartość
-   od 0,01 do 10 000 PLN. Zdjęcia, płatność i etykieta kurierska nie należą do v1.
+   od 0,01 do 10 000 PLN. Płatność i etykieta kurierska nie należą do v1.
 3. Publiczny zapis jest metodą POST, używa CSRF powiązanego z sesją/cookie,
    ścisłego originu, limitu rozmiaru i częstotliwości, honeypotu oraz klucza
    idempotencji związanego z aktorem. Odpowiedź sukcesu jest neutralna i nie
@@ -44,13 +44,31 @@ przyjęcie zegarka. Publiczny formularz nie może więc bezpośrednio tworzyć
    zgodności z inline bootstrappingiem Frappe v16; usunięcie go wymaga
    frameworkowego nonce albo przebudowy bazowego szablonu.
 
+10. Formularz może zawierać od 0 do 3 zdjęć zegarka. Jeden końcowy request
+    `multipart/form-data` przenosi JSON i pliki bez wcześniejszego uploadu.
+    Pojedynczy plik ma najwyżej 5 MiB; przyjmowane są rzeczywiste kontenery
+    JPEG, PNG i WebP. Świeży proces dekodera weryfikuje pełny kontener i jedną
+    klatkę, ogranicza wejście do 4096 px na bok i 16 MP, usuwa metadane,
+    uwzględnia orientację EXIF i zapisuje wyłącznie znormalizowany JPEG.
+11. Wszystkie zdjęcia są prywatnymi, dokładnie przypiętymi rekordami `File`.
+    Intake przechowuje niezmienny porządek i manifest hashy; fingerprint
+    idempotencji obejmuje również uporządkowany komplet zdjęć. Odpowiedź
+    publiczna nie ujawnia URL-i, nazw ani identyfikatorów plików.
+12. Przy kontrolowanej konwersji do `Naprawa` powstają prywatne kopie załączników
+    w tej samej kolejności. Snapshot intake pozostaje niezmieniony. Brak skanera
+    AV jest zapisywany jawnie jako `NOT_SCANNED`; normalizacja nie może być
+    przedstawiana jako skan antywirusowy.
+
 ## Granice i konsekwencje
 
 - Intake jest prośbą o rozpoczęcie obsługi, nie potwierdzeniem przyjęcia zegarka,
   wyceną, terminem, ubezpieczeniem ani zleceniem przewozu.
 - Konto ułatwia bezpieczne powiązanie, ale nowe zgłoszenie nie staje się widoczną
   naprawą do chwili kontrolowanej konwersji.
-- Upload zdjęć oraz guest-token read wymagają osobnych threat modeli i ADR.
+- Publiczny odczyt zdjęć i guest-token read pozostają poza zakresem. Zdjęcia
+  widzą wyłącznie role `Serwis` i `System Manager` w Desk.
+- Rozszerzenie dostępu do plików wymaga osobnej decyzji o AV i retencji. Do tego
+  czasu prywatny snapshot intake nie jest automatycznie usuwany.
 - Automatyczne czyszczenie intake nie wchodzi do pierwszego pionu. Rekomendacja
   operacyjna: przegląd po 180 dniach dla rekordów odrzuconych i nieprzyjętych;
   purge dopiero po zatwierdzeniu polityki, legal hold i zgodności backupów.

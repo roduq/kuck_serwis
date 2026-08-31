@@ -1,0 +1,21 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": ["photo", "content_sha256", "width", "height", "normalizer_version", "scan_status"],
+ "fields": [
+  {"fieldname": "photo", "fieldtype": "Attach Image", "in_list_view": 1, "label": "Zdjęcie", "read_only": 1, "reqd": 1},
+  {"fieldname": "content_sha256", "fieldtype": "Data", "hidden": 1, "label": "SHA-256", "read_only": 1, "reqd": 1},
+  {"fieldname": "width", "fieldtype": "Int", "hidden": 1, "label": "Szerokość", "read_only": 1, "reqd": 1},
+  {"fieldname": "height", "fieldtype": "Int", "hidden": 1, "label": "Wysokość", "read_only": 1, "reqd": 1},
+  {"fieldname": "normalizer_version", "fieldtype": "Data", "hidden": 1, "label": "Wersja normalizatora", "read_only": 1, "reqd": 1},
+  {"fieldname": "scan_status", "fieldtype": "Data", "hidden": 1, "label": "Status skanowania", "read_only": 1, "reqd": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "module": "Kuck Serwis",
+ "name": "Kuck Repair Intake Photo",
+ "permissions": []
+}

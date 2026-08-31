@@ -95,6 +95,13 @@
 				<textarea id="condition-description" name="condition_description" rows="3" maxlength="1000" aria-describedby="condition-help"></textarea>
 				<small id="condition-help">Opcjonalnie: rysy, wgniecenia, brakujące elementy.</small>
 			</div>
+			<div class="repair-intake__field repair-intake__photos">
+				<label for="repair-photos">Zdjęcia zegarka <span class="repair-intake__optional">(opcjonalnie)</span></label>
+				<input id="repair-photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="photos-help photos-count">
+				<small id="photos-help">Dodaj maksymalnie 3 zdjęcia JPG, PNG lub WebP, do 5 MB każde. Zdjęcia zobaczy wyłącznie obsługa serwisu.</small>
+				<p id="photos-count" class="repair-intake__photo-count" aria-live="polite">0 z 3 zdjęć</p>
+				<ul id="photos-preview" class="repair-intake__photo-list" aria-label="Wybrane zdjęcia"></ul>
+			</div>
 		</fieldset>
 
 		<fieldset>

@@ -9,7 +9,14 @@
 	const success = document.getElementById("repair-intake-success");
 	const submit = form.querySelector('button[type="submit"]');
 	const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+	const photoInput = document.getElementById("repair-photos");
+	const photoList = document.getElementById("photos-preview");
+	const photoCount = document.getElementById("photos-count");
 	let idempotencyKey = "";
+	let selectedPhotos = [];
+	let previewUrls = [];
+	const MAX_PHOTOS = 3;
+	const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 	function createKey() {
 		if (globalThis.crypto?.randomUUID)
@@ -71,6 +78,52 @@
 		errors.textContent = "";
 	}
 
+	function renderPhotos(focusIndex = null) {
+		previewUrls.forEach((url) => URL.revokeObjectURL(url));
+		previewUrls = selectedPhotos.map((file) => URL.createObjectURL(file));
+		photoList.replaceChildren();
+		selectedPhotos.forEach((file, index) => {
+			const item = document.createElement("li");
+			const image = document.createElement("img");
+			image.src = previewUrls[index];
+			image.alt = "";
+			const name = document.createElement("span");
+			name.textContent = file.name;
+			const remove = document.createElement("button");
+			remove.type = "button";
+			remove.textContent = "Usuń";
+			remove.setAttribute("aria-label", `Usuń zdjęcie ${file.name}`);
+			remove.addEventListener("click", () => {
+				selectedPhotos.splice(index, 1);
+				renderPhotos(Math.min(index, selectedPhotos.length - 1));
+			});
+			item.append(image, name, remove);
+			photoList.append(item);
+		});
+		photoCount.textContent = `${selectedPhotos.length} z ${MAX_PHOTOS} zdjęć`;
+		photoInput.disabled = selectedPhotos.length >= MAX_PHOTOS;
+		if (focusIndex !== null) {
+			const buttons = photoList.querySelectorAll("button");
+			if (focusIndex >= 0 && buttons[focusIndex]) buttons[focusIndex].focus();
+			else photoInput.focus();
+		}
+	}
+
+	photoInput?.addEventListener("change", () => {
+		const files = Array.from(photoInput.files ?? []);
+		photoInput.value = "";
+		if (
+			selectedPhotos.length + files.length > MAX_PHOTOS ||
+			files.some((file) => file.size < 1 || file.size > MAX_PHOTO_BYTES)
+		) {
+			showError("Możesz dodać łącznie maksymalnie 3 zdjęcia, do 5 MB każde.");
+			return;
+		}
+		clearError();
+		selectedPhotos.push(...files);
+		renderPhotos();
+	});
+
 	try {
 		idempotencyKey = createKey();
 	} catch (_error) {
@@ -98,13 +151,17 @@
 		submit.disabled = true;
 		submit.textContent = "Wysyłanie…";
 		try {
+			const body = new FormData();
+			body.append("payload", JSON.stringify(payload()));
+			body.append("idempotency_key", idempotencyKey);
+			selectedPhotos.forEach((file) => body.append("photos", file, file.name));
 			const response = await fetch(
 				"/api/method/kuck_serwis.repair_intake.submit_repair_intake",
 				{
 					method: "POST",
 					credentials: "same-origin",
-					headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": csrf },
-					body: JSON.stringify({ payload: payload(), idempotency_key: idempotencyKey }),
+					headers: { "X-Frappe-CSRF-Token": csrf },
+					body,
 				}
 			);
 			if (!response.ok) throw new Error("SUBMIT_FAILED");

@@ -17,6 +17,12 @@ from kuck_serwis.repair_intake_contract import (
 	validate_idempotency_key,
 	validate_submission,
 )
+from kuck_serwis.repair_intake_photo import (
+	RepairIntakePhotoError,
+	bind_normalized_photo_to_repair,
+	media_fingerprint,
+	normalize_uploaded_photos,
+)
 from kuck_serwis.repair_intake_security import request_actor_scope, require_write_request
 
 DOCTYPE = "Kuck Repair Intake"
@@ -33,17 +39,27 @@ def submit_repair_intake(payload: object = None, idempotency_key: object = None)
 		raw = _payload(payload)
 		submission = validate_submission(raw)
 		key = validate_idempotency_key(idempotency_key)
-	except (RepairIntakeContractError, json.JSONDecodeError, UnicodeDecodeError, TypeError):
+	except (
+		RepairIntakeContractError,
+		json.JSONDecodeError,
+		UnicodeDecodeError,
+		TypeError,
+	):
 		frappe.throw("REPAIR_INTAKE_VALIDATION_FAILED", frappe.ValidationError)
 	if submission.honeypot_triggered:
 		return dict(_SUCCESS)
+	try:
+		photos = normalize_uploaded_photos(_request_photo_files())
+	except RepairIntakePhotoError:
+		frappe.throw("REPAIR_INTAKE_VALIDATION_FAILED", frappe.ValidationError)
 
 	scope = request_actor_scope()
 	binding = _digest("idempotency", scope, _digest("key", key))
-	fingerprint = _digest("request", submission.canonical_json())
+	fingerprint = _digest("request", submission.canonical_json(), media_fingerprint(photos))
+	legacy_fingerprint = _digest("request", submission.canonical_json()) if not photos else None
 	existing = _existing(binding)
 	if existing:
-		return _replay(existing, fingerprint)
+		return _replay(existing, fingerprint, legacy_fingerprint)
 
 	user = _current_user()
 	customer = _single_authorized_customer(user)
@@ -82,8 +98,38 @@ def submit_repair_intake(payload: object = None, idempotency_key: object = None)
 	except frappe.DuplicateEntryError:
 		existing = _existing(binding)
 		if existing:
-			return _replay(existing, fingerprint)
+			return _replay(existing, fingerprint, legacy_fingerprint)
 		raise
+	# Never catch failures below: Frappe rolls the request transaction back, and
+	# every File insert registers File.on_rollback to remove its private blob.
+	for photo in photos:
+		attachment = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"repair-intake-{frappe.generate_hash(length=16)}.jpg",
+				"is_private": 1,
+				"content": photo.body,
+				"attached_to_doctype": DOCTYPE,
+				"attached_to_name": doc.name,
+				"attached_to_field": "photos",
+			}
+		).insert(ignore_permissions=True)
+		doc.append(
+			"photos",
+			{
+				"photo": attachment.file_url,
+				"content_sha256": photo.sha256,
+				"width": photo.width,
+				"height": photo.height,
+				"normalizer_version": "1",
+				"scan_status": "NOT_SCANNED",
+			},
+		)
+	if photos:
+		doc.photo_count = len(photos)
+		doc.photo_manifest_sha256 = media_fingerprint(photos)
+		doc.flags.repair_intake_photo_initialization = True
+		doc.save(ignore_permissions=True)
 	frappe.logger("repair_intake", allow_site=True).info(
 		{"event": "repair_intake_created", "source": source, "account_linked": bool(customer)}
 	)
@@ -131,7 +177,39 @@ def accept_repair_intake(
 			"powiadom_email": 0,
 		}
 	)
+	transfer_files = tuple(_exact_intake_photo_file(doc.name, row) for row in doc.photos or ())
 	repair.insert()
+	for position, (row, source_file) in enumerate(zip(doc.photos or (), transfer_files, strict=True), 1):
+		content = source_file.get_content()
+		if type(content) is not bytes or hashlib.sha256(content).hexdigest() != row.content_sha256:
+			frappe.throw("REPAIR_INTAKE_PHOTO_CONTENT_INVALID", frappe.ValidationError)
+		binding = _digest("photo-copy", repair.name, str(position), row.content_sha256)
+		bound_content = bind_normalized_photo_to_repair(content, binding)
+		attachment = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"repair-{frappe.generate_hash(length=16)}.jpg",
+				"is_private": 1,
+				"content": bound_content,
+				"attached_to_doctype": "Naprawa",
+				"attached_to_name": repair.name,
+				"attached_to_field": "zdjecie",
+			}
+		).insert(ignore_permissions=True)
+		if not attachment.is_private or attachment.file_url == row.photo:
+			frappe.throw("REPAIR_INTAKE_PHOTO_TRANSFER_FAILED", frappe.ValidationError)
+		repair.append(
+			"zdjecia",
+			{
+				"zdjecie": attachment.file_url,
+				"opis": "Zdjęcie ze zgłoszenia online",
+				"source_intake": doc.name,
+				"source_intake_position": position,
+				"source_content_sha256": row.content_sha256,
+			},
+		)
+	if doc.photos:
+		repair.save()
 	doc.status = "Przyjęte"
 	doc.accepted_repair = repair.name
 	doc.reviewed_by = frappe.session.user
@@ -199,6 +277,35 @@ def _payload(value: object) -> dict:
 	raise TypeError
 
 
+def _request_photo_files() -> tuple[object, ...]:
+	request = getattr(getattr(frappe, "local", None), "request", None)
+	files = getattr(request, "files", None)
+	if files is None:
+		return ()
+	keys = tuple(files.keys())
+	if any(key != "photos" for key in keys):
+		raise RepairIntakePhotoError("REPAIR_INTAKE_PHOTO_INVALID")
+	return tuple(files.getlist("photos")) if "photos" in keys else ()
+
+
+def _exact_intake_photo_file(intake_name: str, row):
+	matches = frappe.get_all(
+		"File",
+		filters={
+			"file_url": row.photo,
+			"is_private": 1,
+			"attached_to_doctype": DOCTYPE,
+			"attached_to_name": intake_name,
+			"attached_to_field": "photos",
+		},
+		pluck="name",
+		limit=2,
+	)
+	if len(matches) != 1:
+		frappe.throw("REPAIR_INTAKE_PHOTO_ATTACHMENT_INVALID", frappe.ValidationError)
+	return frappe.get_doc("File", matches[0])
+
+
 def _current_user() -> str:
 	user = getattr(getattr(frappe, "session", None), "user", None)
 	return user if type(user) is str and user else "Guest"
@@ -237,8 +344,8 @@ def _existing(binding: str):
 	)
 
 
-def _replay(existing, fingerprint: str) -> dict[str, bool]:
-	if existing.request_fingerprint != fingerprint:
+def _replay(existing, fingerprint: str, legacy_fingerprint: str | None = None) -> dict[str, bool]:
+	if existing.request_fingerprint not in {fingerprint, legacy_fingerprint}:
 		frappe.throw("REPAIR_INTAKE_IDEMPOTENCY_CONFLICT", frappe.ValidationError)
 	return dict(_SUCCESS)
 

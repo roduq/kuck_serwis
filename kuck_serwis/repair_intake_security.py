@@ -8,7 +8,9 @@ from urllib.parse import urlsplit
 
 import frappe
 
-_ALLOWED_MIME_TYPES = frozenset({"application/json", "application/x-www-form-urlencoded"})
+_ALLOWED_MIME_TYPES = frozenset(
+	{"application/json", "application/x-www-form-urlencoded", "multipart/form-data"}
+)
 _COOKIE_NAME = "__Host-kuck_repair_intake"
 _COOKIE_SECRET_BYTES = 32
 
@@ -38,7 +40,8 @@ def require_write_request() -> None:
 	if getattr(request, "mimetype", None) not in _ALLOWED_MIME_TYPES:
 		_fail()
 	content_length = getattr(request, "content_length", None)
-	if type(content_length) is not int or not 1 <= content_length <= 24_000:
+	max_length = 16 * 1024 * 1024 if getattr(request, "mimetype", None) == "multipart/form-data" else 24_000
+	if type(content_length) is not int or not 1 <= content_length <= max_length:
 		_fail()
 	origin = _origin(getattr(request, "headers", {}).get("Origin"))
 	configured = _origin(getattr(getattr(frappe, "conf", None), "get", lambda _key: None)("host_name"))

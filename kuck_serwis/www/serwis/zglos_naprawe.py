@@ -17,7 +17,7 @@ CSP = "; ".join(
 		"form-action 'self'",
 		"script-src 'self' 'unsafe-inline'",
 		"style-src 'self' 'unsafe-inline'",
-		"img-src 'self' data:",
+		"img-src 'self' data: blob:",
 		"font-src 'self' data:",
 		"connect-src 'self'",
 		"media-src 'self'",

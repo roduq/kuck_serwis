@@ -19,6 +19,11 @@ class FakeDuplicateEntryError(Exception):
 	pass
 
 
+class FakeFiles(dict):
+	def getlist(self, key):
+		return self.get(key, [])
+
+
 class FakeDoc:
 	def __init__(self, values, database):
 		self.values = values
@@ -69,6 +74,7 @@ def fake_frappe():
 		content_length=1000,
 		headers={"Origin": "https://kuck.localhost", "Sec-Fetch-Site": "same-origin"},
 		cookies={repair_intake_security._COOKIE_NAME: "A" * 43},
+		files=FakeFiles(),
 	)
 	fake = types.SimpleNamespace(
 		db=database,
@@ -151,6 +157,10 @@ class TestRepairIntakeAPI(unittest.TestCase):
 		key = "repair_abcdefghijklmnopqrstuvwxyz"
 		self.assertEqual(self.submit(payload(website="spam.example"), key), {"accepted": True})
 		self.assertFalse(self.frappe.db.rows)
+		self.frappe.local.request.headers["Origin"] = "https://attacker.example"
+		with self.assertRaises(FakePermissionError):
+			self.submit(payload(), key)
+		self.assertFalse(self.frappe.db.rows)
 
 	def test_missing_or_invalid_content_length_fails_closed(self):
 		key = "repair_abcdefghijklmnopqrstuvwxyz"
@@ -160,10 +170,19 @@ class TestRepairIntakeAPI(unittest.TestCase):
 				with self.assertRaises(FakePermissionError):
 					self.submit(payload(), key)
 		self.assertFalse(self.frappe.db.rows)
-		self.frappe.local.request.headers["Origin"] = "https://attacker.example"
+
+	def test_multipart_without_photos_and_strict_file_field_are_supported(self):
+		key = "repair_abcdefghijklmnopqrstuvwxyz"
+		self.frappe.local.request.mimetype = "multipart/form-data"
+		self.assertEqual(self.submit(payload(), key), {"accepted": True})
+		self.frappe.db.rows.clear()
+		self.frappe.local.request.files = FakeFiles({"avatar": []})
+		with self.assertRaises(FakeValidationError):
+			self.submit(payload(), key)
+		self.frappe.local.request.files = FakeFiles()
+		self.frappe.local.request.content_length = 16 * 1024 * 1024 + 1
 		with self.assertRaises(FakePermissionError):
 			self.submit(payload(), key)
-		self.assertFalse(self.frappe.db.rows)
 
 	def test_logged_website_user_links_only_exact_portal_user_customer(self):
 		self.frappe.session.user = "member@example.test"
