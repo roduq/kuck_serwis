@@ -92,10 +92,13 @@ def _guest_csrf_token(raw: str) -> str:
 	return sha256(b"kuck.repair-intake.csrf.v1\0" + raw.encode("ascii")).hexdigest()
 
 
-def _origin(value: object) -> tuple[str, str] | None:
+def _origin(value: object) -> tuple[str, str, int] | None:
 	if type(value) is not str:
 		return None
-	parsed = urlsplit(value)
+	try:
+		parsed = urlsplit(value)
+	except ValueError:
+		return None
 	if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path not in ("", "/"):
 		return None
 	if parsed.query or parsed.fragment or parsed.username or parsed.password:
@@ -107,7 +110,11 @@ def _origin(value: object) -> tuple[str, str] | None:
 		and not host.endswith(".localhost")
 	):
 		return None
-	return parsed.scheme, parsed.netloc.casefold()
+	try:
+		port = parsed.port
+	except ValueError:
+		return None
+	return parsed.scheme, host, port or (443 if parsed.scheme == "https" else 80)
 
 
 def _fail() -> None:

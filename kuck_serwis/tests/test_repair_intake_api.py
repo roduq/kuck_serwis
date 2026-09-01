@@ -3,6 +3,12 @@ from __future__ import annotations
 import types
 import unittest
 from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
+
+import frappe as real_frappe
+from frappe import rate_limiter as real_rate_limiter
 
 from kuck_serwis import repair_intake, repair_intake_security
 
@@ -66,6 +72,28 @@ class FakeLogger:
 
 	def info(self, event):
 		self.events.append(event)
+
+
+class FakeRateLimitCache:
+	def __init__(self):
+		self.values = {}
+
+	def make_key(self, key):
+		return key.encode()
+
+	def get(self, key):
+		return self.values.get(key)
+
+	def setex(self, key, seconds, value):
+		self.values[key] = value
+
+	def incrby(self, key, amount):
+		self.values[key] = self.values.get(key, 0) + amount
+		return self.values[key]
+
+
+def raise_frappe_exception(message, exception):
+	raise exception(message)
 
 
 def fake_frappe():
@@ -161,9 +189,34 @@ class TestRepairIntakeAPI(unittest.TestCase):
 		self.assertEqual(self.submit(payload(website="spam.example"), key), {"accepted": True})
 		self.assertFalse(self.frappe.db.rows)
 		self.frappe.local.request.headers["Origin"] = "https://attacker.example"
-		with self.assertRaises(FakePermissionError):
-			self.submit(payload(), key)
+		with mock.patch.object(repair_intake, "_submit_repair_intake_rate_limited") as limited:
+			with self.assertRaises(FakePermissionError):
+				self.submit(payload(), key)
+			limited.assert_not_called()
 		self.assertFalse(self.frappe.db.rows)
+
+	def test_origin_uses_effective_ports_and_localhost_must_match_configured_port(self):
+		key = "repair_abcdefghijklmnopqrstuvwxyz"
+		cases = (
+			("https://erpnext.kuck.pl", "https://erpnext.kuck.pl:443", True),
+			("https://erpnext.kuck.pl:443", "https://erpnext.kuck.pl", True),
+			("https://erpnext.kuck.pl", "https://erpnext.kuck.pl:444", False),
+			("http://localhost:8000", "http://localhost:8000", True),
+			("http://localhost:8000", "http://localhost:8001", False),
+			("http://127.0.0.1:8000", "http://127.0.0.1:8001", False),
+			("http://[::1]:8000", "http://[::1]:8000", True),
+			("https://erpnext.kuck.pl", "https://[invalid", False),
+		)
+		for configured, origin, accepted in cases:
+			with self.subTest(configured=configured, origin=origin):
+				self.frappe.conf["host_name"] = configured
+				self.frappe.local.request.headers["Origin"] = origin
+				self.frappe.db.rows.clear()
+				if accepted:
+					self.assertEqual(self.submit(payload(), key), {"accepted": True})
+				else:
+					with self.assertRaises(FakePermissionError):
+						self.submit(payload(), key)
 
 	def test_missing_or_invalid_content_length_fails_closed(self):
 		key = "repair_abcdefghijklmnopqrstuvwxyz"
@@ -213,6 +266,65 @@ class TestRepairIntakeAPI(unittest.TestCase):
 		if allowed:
 			self.assertEqual(allowed[repair_intake.submit_repair_intake], ["POST"])
 		self.assertEqual(repair_intake.submit_repair_intake.__name__, "submit_repair_intake")
+
+
+class TestRepairIntakeRateLimitIntegration(unittest.TestCase):
+	def setUp(self):
+		self.sites = TemporaryDirectory()
+		Path(self.sites.name, "apps.txt").write_text("frappe\nerpnext\nkuck_serwis\n", encoding="utf-8")
+		site_path = Path(self.sites.name, "test.localhost")
+		site_path.mkdir()
+		Path(site_path, "site_config.json").write_text("{}", encoding="utf-8")
+		real_frappe.init(site="test.localhost", sites_path=self.sites.name)
+		self.cache = FakeRateLimitCache()
+		self.cache_patch = mock.patch.object(real_frappe, "cache", self.cache)
+		self.cache_patch.start()
+		self.translation_patch = mock.patch.object(real_rate_limiter, "_", side_effect=lambda value: value)
+		self.translation_patch.start()
+		self.throw_patch = mock.patch.object(real_frappe, "throw", side_effect=raise_frappe_exception)
+		self.throw_patch.start()
+		real_frappe.local.request = types.SimpleNamespace(method="POST")
+		real_frappe.local.request_ip = "198.51.100.7"
+		real_frappe.local.form_dict = real_frappe._dict(cmd="kuck_serwis.repair_intake.submit_repair_intake")
+
+	def tearDown(self):
+		self.throw_patch.stop()
+		self.translation_patch.stop()
+		self.cache_patch.stop()
+		real_frappe.destroy()
+		self.sites.cleanup()
+
+	def test_post_validation_limit_is_ip_only_and_ninth_write_is_rejected(self):
+		with mock.patch.object(repair_intake, "_submit_repair_intake", return_value={"accepted": True}):
+			for _ in range(8):
+				self.assertEqual(repair_intake._submit_repair_intake_rate_limited(), {"accepted": True})
+			with self.assertRaises(real_frappe.RateLimitExceededError):
+				repair_intake._submit_repair_intake_rate_limited()
+			real_frappe.local.request_ip = "198.51.100.8"
+			self.assertEqual(repair_intake._submit_repair_intake_rate_limited(), {"accepted": True})
+
+		keys = tuple(self.cache.values)
+		self.assertEqual(len(keys), 2)
+		self.assertTrue(all(key.endswith(b":3600") for key in keys))
+
+	def test_invalid_origin_consumes_only_outer_short_window(self):
+		real_frappe.local.request = types.SimpleNamespace(
+			method="POST",
+			mimetype="application/json",
+			content_length=100,
+			headers={"Origin": "http://localhost:8000"},
+			cookies={},
+		)
+		real_frappe.local.session = types.SimpleNamespace(
+			user="Guest", data=types.SimpleNamespace(csrf_token=None)
+		)
+		real_frappe.conf.host_name = "https://erpnext.kuck.pl"
+		with self.assertRaises(real_frappe.PermissionError):
+			repair_intake.submit_repair_intake(payload(), "repair_abcdefghijklmnopqrstuvwxyz")
+
+		keys = tuple(self.cache.values)
+		self.assertEqual(len(keys), 1)
+		self.assertTrue(keys[0].endswith(b":600"))
 
 
 if __name__ == "__main__":

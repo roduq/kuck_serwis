@@ -32,10 +32,21 @@ _REPAIR_TYPES = frozenset({"Naprawa krótka", "Naprawa długa", "Gwarancja", "Re
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-@rate_limit(limit=8, seconds=60 * 60)
+@rate_limit(limit=120, seconds=10 * 60)
 def submit_repair_intake(payload: object = None, idempotency_key: object = None) -> dict[str, bool]:
 	"""Create one private intake without creating or disclosing Customer/Repair."""
 	require_write_request()
+	return _submit_repair_intake_rate_limited(payload, idempotency_key)
+
+
+@rate_limit(limit=8, seconds=60 * 60)
+def _submit_repair_intake_rate_limited(
+	payload: object = None, idempotency_key: object = None
+) -> dict[str, bool]:
+	return _submit_repair_intake(payload, idempotency_key)
+
+
+def _submit_repair_intake(payload: object = None, idempotency_key: object = None) -> dict[str, bool]:
 	try:
 		raw = _payload(payload)
 		submission = validate_submission(raw)
