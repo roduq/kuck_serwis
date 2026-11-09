@@ -12,6 +12,24 @@ _DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _STATUSES = frozenset({"Nowe", "Przyjęte", "Odrzucone"})
 _SOURCES = frozenset({"Guest", "Portal User"})
 _METHODS = frozenset({"SALON", "COURIER"})
+_REMOTE_STATES = frozenset(
+	{
+		"AWAITING_SERVICE_REVIEW",
+		"AWAITING_INBOUND_PAYMENT",
+		"INBOUND_PAYMENT_PENDING",
+		"INBOUND_LABEL_READY",
+		"INBOUND_IN_TRANSIT",
+		"AWAITING_PHYSICAL_RECEIPT",
+		"RECEIVED",
+		"AWAITING_QUOTE_DECISION",
+		"AWAITING_REPAIR_PAYMENT",
+		"RETURN_LABEL_READY",
+		"RETURN_IN_TRANSIT",
+		"COMPLETED",
+		"CANCELLED",
+		"REVIEW_REQUIRED",
+	}
+)
 PUBLIC_ID_PATTERN = re.compile(r"^rqi_[A-Za-z0-9_-]{32}$")
 PUBLIC_ID_GENERATION_ATTEMPTS = 5
 
@@ -28,6 +46,10 @@ class KuckRepairIntake(Document):
 			frappe.throw("REPAIR_INTAKE_INVALID_STATE")
 		if self.delivery_method not in _METHODS or self.return_method not in _METHODS:
 			frappe.throw("REPAIR_INTAKE_INVALID_DELIVERY")
+		if self.remote_state not in _REMOTE_STATES:
+			frappe.throw("REPAIR_INTAKE_INVALID_REMOTE_STATE")
+		if self.access_grant_hash and _DIGEST.fullmatch(self.access_grant_hash) is None:
+			frappe.throw("REPAIR_INTAKE_INVALID_ACCESS_GRANT")
 		if _DIGEST.fullmatch(self.idempotency_binding or "") is None:
 			frappe.throw("REPAIR_INTAKE_INVALID_BINDING")
 		if _DIGEST.fullmatch(self.request_fingerprint or "") is None:
@@ -58,6 +80,11 @@ class KuckRepairIntake(Document):
 				"delivery_method",
 				"return_method",
 				"declared_value",
+				"address_line1",
+				"address_line2",
+				"city",
+				"postal_code",
+				"country",
 				"privacy_revision",
 				"privacy_proof_sha256",
 				"idempotency_binding",
@@ -85,6 +112,11 @@ class KuckRepairIntake(Document):
 				or self.accepted_repair != previous.accepted_repair
 				or self.reviewed_by != previous.reviewed_by
 				or self.reviewed_at != previous.reviewed_at
+				or self.remote_state != previous.remote_state
+				or self.service_approved_by != previous.service_approved_by
+				or self.service_approved_at != previous.service_approved_at
+				or self.inbound_quote_minor != previous.inbound_quote_minor
+				or self.inbound_quote_fingerprint != previous.inbound_quote_fingerprint
 			) and not self.flags.get("repair_intake_transition"):
 				frappe.throw("REPAIR_INTAKE_CONTROLLED_TRANSITION_REQUIRED")
 		if self.status == "Przyjęte" and not self.accepted_repair:

@@ -97,6 +97,11 @@ def _submit_repair_intake(payload: object = None, idempotency_key: object = None
 			"delivery_method": submission.delivery_method.value,
 			"return_method": submission.return_method.value,
 			"declared_value": submission.declared_value,
+			"address_line1": submission.address_line1,
+			"address_line2": submission.address_line2,
+			"city": submission.city,
+			"postal_code": submission.postal_code,
+			"country": submission.country,
 			"privacy_revision": PRIVACY_REVISION,
 			"privacy_proof_sha256": PRIVACY_PROOF_SHA256,
 			"idempotency_binding": binding,
@@ -151,6 +156,10 @@ def _submit_repair_intake(payload: object = None, idempotency_key: object = None
 		doc.photo_manifest_sha256 = photo_manifest_from_hashes(tuple(stored_hashes))
 		doc.flags.repair_intake_photo_initialization = True
 		doc.save(ignore_permissions=True)
+	from kuck_serwis.public_contract.repair_remote_v1 import issue_guest_access, notify_intake_created
+
+	access_url = issue_guest_access(doc) if source == "Guest" else "/konto/naprawy"
+	notify_intake_created(doc, access_url=access_url)
 	frappe.logger("repair_intake", allow_site=True).info(
 		{"event": "repair_intake_created", "source": source, "account_linked": bool(customer)}
 	)
@@ -232,6 +241,7 @@ def accept_repair_intake(
 	if doc.photos:
 		repair.save()
 	doc.status = "Przyjęte"
+	doc.remote_state = "RECEIVED"
 	doc.accepted_repair = repair.name
 	doc.reviewed_by = frappe.session.user
 	doc.reviewed_at = now_datetime()
@@ -257,6 +267,7 @@ def reject_repair_intake(intake_name: str, expected_modified: str, reason: objec
 	if doc.status == "Przyjęte":
 		frappe.throw("REPAIR_INTAKE_ALREADY_ACCEPTED", frappe.ValidationError)
 	doc.status = "Odrzucone"
+	doc.remote_state = "CANCELLED"
 	doc.review_notes = reason.strip()
 	doc.reviewed_by = frappe.session.user
 	doc.reviewed_at = now_datetime()

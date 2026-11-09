@@ -40,6 +40,13 @@
 		const visible = isShipping();
 		shipping.hidden = !visible;
 		valueInput.required = visible;
+		["address_line1", "city", "postal_code"].forEach((name) => {
+			const input = form.elements.namedItem(name);
+			if (input) {
+				input.required = visible;
+				if (!visible) input.value = "";
+			}
+		});
 		if (!visible) valueInput.value = "";
 	}
 
@@ -62,6 +69,11 @@
 			delivery_method: field("delivery_method"),
 			return_method: field("return_method"),
 			declared_value: field("declared_value"),
+			address_line1: field("address_line1"),
+			address_line2: field("address_line2"),
+			city: field("city"),
+			postal_code: field("postal_code"),
+			country: field("country") || "PL",
 			privacy_accepted: form.elements.namedItem("privacy_accepted")?.checked ?? false,
 			website: field("website"),
 		};

@@ -6,6 +6,19 @@ frappe.ui.form.on("Kuck Repair Intake", {
 			);
 		}
 		if (frm.is_new() || ["Przyjęte", "Odrzucone"].includes(frm.doc.status)) return;
+		if (frm.doc.remote_state === "AWAITING_SERVICE_REVIEW") {
+			frm.add_custom_button(
+				__("Zatwierdź do procesu i płatności"),
+				() =>
+					frappe.call({
+						method: "kuck_serwis.public_contract.repair_remote_v1.approve_remote_intake",
+						args: { intake_name: frm.doc.name, expected_modified: frm.doc.modified },
+						freeze: true,
+						callback: () => frm.reload_doc(),
+					}),
+				__("Obsługa zgłoszenia")
+			);
+		}
 		frm.add_custom_button(
 			__("Utwórz naprawę po przyjęciu"),
 			() => {

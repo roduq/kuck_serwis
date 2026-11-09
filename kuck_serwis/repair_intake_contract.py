@@ -34,6 +34,11 @@ _EXPECTED_FIELDS: Final = frozenset(
 		"delivery_method",
 		"return_method",
 		"declared_value",
+		"address_line1",
+		"address_line2",
+		"city",
+		"postal_code",
+		"country",
 		"privacy_accepted",
 		"website",
 	}
@@ -81,6 +86,11 @@ class RepairIntakeSubmission:
 	delivery_method: DeliveryMethod
 	return_method: DeliveryMethod
 	declared_value: Decimal | None
+	address_line1: str = field(repr=False)
+	address_line2: str = field(repr=False)
+	city: str = field(repr=False)
+	postal_code: str = field(repr=False)
+	country: str = field(repr=False)
 	privacy_accepted: bool = field(repr=False)
 	honeypot_triggered: bool = field(repr=False)
 
@@ -115,6 +125,16 @@ def validate_submission(payload: object) -> RepairIntakeSubmission:
 		delivery is DeliveryMethod.COURIER or return_method is DeliveryMethod.COURIER
 	) and declared_value is None:
 		_fail(RepairIntakeErrorCode.VALUE_REQUIRED, "declared_value")
+	address_line1 = _optional_single_line(payload["address_line1"], "address_line1", 160)
+	address_line2 = _optional_single_line(payload["address_line2"], "address_line2", 160)
+	city = _optional_single_line(payload["city"], "city", 120)
+	postal_code = _optional_single_line(payload["postal_code"], "postal_code", 16)
+	country = _optional_single_line(payload["country"], "country", 2)
+	if delivery is DeliveryMethod.COURIER or return_method is DeliveryMethod.COURIER:
+		if not address_line1 or not city or re.fullmatch(r"[0-9]{2}-[0-9]{3}", postal_code) is None:
+			_fail(RepairIntakeErrorCode.INVALID_TEXT, "address")
+		if country != "PL":
+			_fail(RepairIntakeErrorCode.INVALID_CHOICE, "country")
 	privacy = _boolean(payload["privacy_accepted"], "privacy_accepted")
 	if not privacy:
 		_fail(RepairIntakeErrorCode.PRIVACY_REQUIRED, "privacy_accepted")
@@ -133,6 +153,11 @@ def validate_submission(payload: object) -> RepairIntakeSubmission:
 		delivery_method=delivery,
 		return_method=return_method,
 		declared_value=declared_value,
+		address_line1=address_line1,
+		address_line2=address_line2,
+		city=city,
+		postal_code=postal_code,
+		country=country,
 		privacy_accepted=privacy,
 		honeypot_triggered=bool(honeypot),
 	)

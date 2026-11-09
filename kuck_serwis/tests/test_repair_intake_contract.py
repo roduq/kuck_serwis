@@ -26,6 +26,11 @@ def payload(**changes):
 		"delivery_method": "SALON",
 		"return_method": "SALON",
 		"declared_value": "",
+		"address_line1": "11 Listopada 8",
+		"address_line2": "",
+		"city": "Olsztyn",
+		"postal_code": "10-104",
+		"country": "PL",
 		"privacy_accepted": True,
 		"website": "",
 	}
@@ -53,6 +58,16 @@ class TestRepairIntakeContract(unittest.TestCase):
 		with self.assertRaises(RepairIntakeContractError) as caught:
 			validate_submission(payload(return_method="COURIER", declared_value="10000.01"))
 		self.assertEqual(caught.exception.code, RepairIntakeErrorCode.VALUE_ABOVE_LIMIT)
+
+	def test_shipping_requires_complete_polish_address(self):
+		for changes in (
+			{"address_line1": ""},
+			{"city": ""},
+			{"postal_code": "10104"},
+			{"country": "DE"},
+		):
+			with self.subTest(changes=changes), self.assertRaises(RepairIntakeContractError):
+				validate_submission(payload(delivery_method="COURIER", declared_value="100", **changes))
 
 	def test_privacy_and_exact_schema_are_required(self):
 		with self.assertRaises(RepairIntakeContractError) as caught:
