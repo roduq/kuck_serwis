@@ -236,9 +236,7 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 			'method="post" enctype="multipart/form-data" novalidate',
 			html,
 		)
-		self.assertIn(
-			'data-kr-endpoint="/api/method/kuck_serwis.repair_intake.submit_repair_intake"', html
-		)
+		self.assertIn('data-kr-endpoint="/api/method/kuck_serwis.repair_intake.submit_repair_intake"', html)
 		self.assertIn('type="submit" data-kr-submit', html)
 		self.assertIn(
 			'id="repair-photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple',
