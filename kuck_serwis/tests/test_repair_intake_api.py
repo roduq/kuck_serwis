@@ -36,20 +36,31 @@ class FakeDoc:
 		self.flags = types.SimpleNamespace(public_repair_intake=False)
 		self.database = database
 
+	def __getattr__(self, key):
+		try:
+			return self.values[key]
+		except KeyError as error:
+			raise AttributeError(key) from error
+
 	def insert(self, **kwargs):
 		if kwargs != {"ignore_permissions": True} or not self.flags.public_repair_intake:
 			raise AssertionError("unsafe public insert")
 		binding = self.values["idempotency_binding"]
 		if binding in self.database.rows:
 			raise FakeDuplicateEntryError
+		self.values["name"] = f"RIN-2026-{len(self.database.rows) + 1:05d}"
+		self.values["public_id"] = f"rqi_{binding[:32]}"
 		self.database.rows[binding] = {
-			"name": f"RIN-2026-{len(self.database.rows) + 1:05d}",
+			"name": self.values["name"],
 			"request_fingerprint": self.values["request_fingerprint"],
 			"values": dict(self.values),
 		}
 
 	def reload(self):
 		return self
+
+	def db_set(self, values, update_modified=True):
+		self.values.update(values)
 
 
 class FakeDB:
@@ -118,6 +129,7 @@ def fake_frappe():
 	)
 	fake.get_doc = lambda values: FakeDoc(values, database)
 	fake.get_all = lambda doctype, **kwargs: []
+	fake.sendmail = lambda **kwargs: None
 	fake.logger = lambda *args, **kwargs: logger
 	fake.throw = lambda message, exception=FakeValidationError: (_ for _ in ()).throw(exception(message))
 	fake._logger = logger
@@ -140,6 +152,11 @@ def payload(**changes):
 		"delivery_method": "SALON",
 		"return_method": "SALON",
 		"declared_value": "",
+		"address_line1": "11 Listopada 8",
+		"address_line2": "",
+		"city": "Olsztyn",
+		"postal_code": "10-104",
+		"country": "PL",
 		"privacy_accepted": True,
 		"website": "",
 	}

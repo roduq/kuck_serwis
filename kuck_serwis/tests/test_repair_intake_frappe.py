@@ -230,13 +230,16 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 		html = response.get_data(as_text=True)
 		self.assertEqual(html.count("<h1"), 1)
 		self.assertEqual(html.count("<main"), 1)
-		self.assertIn('aria-labelledby="repair-intake-title"', html)
+		self.assertIn('aria-labelledby="srv-form-title"', html)
 		self.assertIn(
-			'id="repair-intake-form" class="repair-intake__form" '
-			'action="/serwis/zglos-naprawe" method="post" novalidate',
+			'class="kr-srv-form" id="repair-intake-form" action="/serwis/zglos-naprawe" '
+			'method="post" enctype="multipart/form-data" novalidate',
 			html,
 		)
-		self.assertIn('class="btn btn-primary repair-intake__submit" type="submit" disabled', html)
+		self.assertIn(
+			'data-kr-endpoint="/api/method/kuck_serwis.repair_intake.submit_repair_intake"', html
+		)
+		self.assertIn('type="submit" data-kr-submit', html)
 		self.assertIn(
 			'id="repair-photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple',
 			html,
