@@ -27,6 +27,7 @@ REMOTE_LABELS = {
 	"AWAITING_REPAIR_PAYMENT": "Oczekuje na płatność naprawy i zwrotu",
 	"RETURN_LABEL_READY": "Przesyłka zwrotna jest przygotowana",
 	"RETURN_IN_TRANSIT": "Zegarek jest w drodze do Ciebie",
+	"READY_FOR_PICKUP": "Zegarek jest gotowy do odbioru w salonie",
 	"COMPLETED": "Zakończono",
 	"CANCELLED": "Anulowano",
 	"REVIEW_REQUIRED": "Wymaga kontaktu z serwisem",
@@ -258,6 +259,117 @@ def set_remote_state(intake, remote_state: str) -> None:
 	intake.flags.repair_intake_transition = True
 
 
+def submit_quote_decision(public_id, decision, expected_revision, request_id, access_token=None):
+	"""Apply an owned quote decision through the existing Naprawa workflow."""
+
+	from frappe.model.workflow import apply_workflow
+
+	from kuck_serwis.repair_intake_contract import validate_idempotency_key
+
+	_require_enabled()
+	if decision not in {"accept", "reject"}:
+		raise RemoteRepairError("VALIDATION_FAILED")
+	validate_idempotency_key(request_id)
+	if access_token:
+		get_intake_by_token(public_id, access_token)
+	else:
+		get_intake_for_current_user(public_id)
+	intake = _locked_intake(public_id)
+	if intake.last_quote_request_id:
+		if intake.last_quote_request_id == request_id and intake.last_quote_decision == decision:
+			return {"decision": decision, "remote_state": intake.remote_state}
+		raise RemoteRepairError("IDEMPOTENCY_CONFLICT")
+	if str(intake.modified) != expected_revision or intake.remote_state != "AWAITING_QUOTE_DECISION":
+		raise RemoteRepairError("REVISION_CONFLICT")
+	if not intake.accepted_repair:
+		raise RemoteRepairError("INVALID_TRANSITION")
+	repair = frappe.get_doc("Naprawa", intake.accepted_repair)
+	if repair.status != "Oczekuje na akceptację":
+		raise RemoteRepairError("INVALID_TRANSITION")
+	if decision == "accept":
+		repair.klient_zaakceptowal = 1
+		repair.akceptacja_uwagi = "Akceptacja wyceny w portalu klienta"
+		repair.save()
+		apply_workflow(repair, "Akceptacja klienta")
+	else:
+		apply_workflow(repair, "Klient rezygnuje")
+	intake.last_quote_request_id = request_id
+	intake.last_quote_decision = decision
+	intake.remote_state = "READY_FOR_PICKUP" if intake.return_method == "SALON" else "AWAITING_REPAIR_PAYMENT"
+	intake.flags.repair_intake_transition = True
+	intake.save()
+	return {"decision": decision, "remote_state": intake.remote_state}
+
+
+def get_return_payment_snapshot(public_id, settlement, *, internal_scope):
+	_require_enabled()
+	if internal_scope != "kuck_shop.repair_commerce.v1":
+		raise RemoteRepairError("NOT_PERMITTED")
+	intake = _locked_intake(public_id)
+	if intake.remote_state != "AWAITING_REPAIR_PAYMENT" or not _address_complete(intake):
+		raise RemoteRepairError("INVALID_TRANSITION")
+	outcome = _return_outcome(intake)
+	if settlement == "FREE" and outcome not in {"warranty_approved", "manufacturer_forwarded"}:
+		raise RemoteRepairError("INVALID_TRANSITION")
+	amount = 0 if settlement == "FREE" else (2500 if settlement == "COD" else 2000)
+	if settlement == "COD" and outcome not in {"rejected", "warranty_rejected"}:
+		raise RemoteRepairError("INVALID_TRANSITION")
+	repair_amount = 0
+	if outcome == "paid" and settlement != "FREE":
+		repair_amount = round(
+			float(frappe.db.get_value("Naprawa", intake.accepted_repair, "orientacyjna_wycena") or 0) * 100
+		)
+	return {
+		"schema": "repair-return-shipment/v1",
+		"intake_id": intake.public_id,
+		"revision": str(intake.modified),
+		"declared_value_minor": round(float(intake.declared_value) * 100),
+		"repair_amount_minor": repair_amount,
+		"amount_minor": amount + repair_amount,
+		"settlement": settlement,
+		"outcome": outcome,
+		"sender": {
+			"name": intake.full_name,
+			"email": intake.email,
+			"phone": intake.phone,
+			"address_line1": intake.address_line1,
+			"address_line2": intake.address_line2,
+			"city": intake.city,
+			"postal_code": intake.postal_code,
+			"country": intake.country,
+		},
+		"receiver": {
+			"name": "Kuck",
+			"address_line1": "ul. 11 Listopada 8",
+			"address_line2": "",
+			"city": "Olsztyn",
+			"postal_code": "10-104",
+			"country": "PL",
+		},
+	}
+
+
+def mark_return_label_ready(public_id, *, internal_scope):
+	_internal_transition(
+		public_id,
+		internal_scope=internal_scope,
+		expected_revision=None,
+		allowed_from={"AWAITING_REPAIR_PAYMENT", "RETURN_LABEL_READY"},
+		to_state="RETURN_LABEL_READY",
+	)
+
+
+def _locked_intake(public_id):
+	if not _valid_public_id(public_id):
+		raise RemoteRepairError("NOT_FOUND")
+	rows = frappe.db.sql(
+		"SELECT name FROM `tabKuck Repair Intake` WHERE public_id = %s FOR UPDATE", public_id
+	)
+	if not rows:
+		raise RemoteRepairError("NOT_FOUND")
+	return frappe.get_doc(DOCTYPE, rows[0][0])
+
+
 def _public_case(intake) -> dict[str, object]:
 	return {
 		"schema": "repair-intake-detail/v1",
@@ -270,10 +382,33 @@ def _public_case(intake) -> dict[str, object]:
 		"delivery_method": intake.delivery_method,
 		"return_method": intake.return_method,
 		"warranty_claim": bool(intake.warranty_claim),
-		"actions": ACTIONS_BY_STATE.get(intake.remote_state, []),
+		"actions": _public_actions(intake),
 		"revision": str(intake.modified),
 		"accepted_repair_id": _accepted_public_id(intake),
 	}
+
+
+def _public_actions(intake) -> list[str]:
+	actions = list(ACTIONS_BY_STATE.get(intake.remote_state, []))
+	if intake.remote_state == "AWAITING_REPAIR_PAYMENT":
+		outcome = _return_outcome(intake)
+		if intake.return_method == "SALON" or outcome in {"warranty_approved", "manufacturer_forwarded"}:
+			return ["create_free_return"]
+		if outcome in {"rejected", "warranty_rejected"}:
+			return ["pay_repair_return", "choose_return_cod"]
+		return ["pay_repair_return"]
+	return actions
+
+
+def _return_outcome(intake) -> str:
+	if not intake.accepted_repair:
+		return "paid"
+	outcome = frappe.db.get_value("Naprawa", intake.accepted_repair, "wynik_gwarancji")
+	return {
+		"Uzasadniona": "warranty_approved",
+		"Przekazana producentowi": "manufacturer_forwarded",
+		"Nieuzasadniona": "warranty_rejected",
+	}.get(outcome, "rejected" if intake.last_quote_decision == "reject" else "paid")
 
 
 def _accepted_public_id(intake) -> str | None:

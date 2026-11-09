@@ -13,6 +13,8 @@
   "klient_email",
   "col_zgloszenie",
   "public_id",
+  "source_intake",
+  "wynik_gwarancji",
   "status",
   "rodzaj_naprawy",
   "sec_zegarek",
@@ -99,6 +101,20 @@
    "no_copy": 1,
    "read_only": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "source_intake",
+   "fieldtype": "Link",
+   "label": "Zgłoszenie online",
+   "options": "Kuck Repair Intake",
+   "read_only": 1
+  },
+  {
+   "default": "Nierozstrzygnięta",
+   "fieldname": "wynik_gwarancji",
+   "fieldtype": "Select",
+   "label": "Wynik gwarancji",
+   "options": "Nierozstrzygnięta\nUzasadniona\nNieuzasadniona\nPrzekazana producentowi"
   },
   {
    "default": "Przyjęto",

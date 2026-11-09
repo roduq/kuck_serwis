@@ -25,6 +25,7 @@ _REMOTE_STATES = frozenset(
 		"AWAITING_REPAIR_PAYMENT",
 		"RETURN_LABEL_READY",
 		"RETURN_IN_TRANSIT",
+		"READY_FOR_PICKUP",
 		"COMPLETED",
 		"CANCELLED",
 		"REVIEW_REQUIRED",
@@ -117,6 +118,8 @@ class KuckRepairIntake(Document):
 				or self.service_approved_at != previous.service_approved_at
 				or self.inbound_quote_minor != previous.inbound_quote_minor
 				or self.inbound_quote_fingerprint != previous.inbound_quote_fingerprint
+				or self.last_quote_request_id != previous.last_quote_request_id
+				or self.last_quote_decision != previous.last_quote_decision
 			) and not self.flags.get("repair_intake_transition"):
 				frappe.throw("REPAIR_INTAKE_CONTROLLED_TRANSITION_REQUIRED")
 		if self.status == "Przyjęte" and not self.accepted_repair:

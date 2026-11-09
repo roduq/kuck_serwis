@@ -108,6 +108,27 @@ class Naprawa(Document):
 
 	def on_update(self):
 		self.apply_prepared_contact_update()
+		self.sync_remote_intake()
+
+	def sync_remote_intake(self):
+		if not getattr(self, "source_intake", None):
+			return
+		previous = self.get_doc_before_save()
+		if previous and previous.status == self.status:
+			return
+		intake = frappe.get_doc("Kuck Repair Intake", self.source_intake)
+		if self.status == "Oczekuje na akceptację":
+			intake.remote_state = "AWAITING_QUOTE_DECISION"
+		elif self.status == "Gotowe do odbioru":
+			intake.remote_state = (
+				"READY_FOR_PICKUP" if intake.return_method == "SALON" else "AWAITING_REPAIR_PAYMENT"
+			)
+		elif self.status == "Wydano":
+			intake.remote_state = "COMPLETED"
+		else:
+			return
+		intake.flags.repair_intake_transition = True
+		intake.save()
 
 	def prepare_contact_update(self):
 		"""Prepare a field-level CAS before the Naprawa row is written.

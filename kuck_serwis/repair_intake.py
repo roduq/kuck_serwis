@@ -191,6 +191,7 @@ def accept_repair_intake(
 	repair = frappe.get_doc(
 		{
 			"doctype": "Naprawa",
+			"source_intake": doc.name,
 			"klient": doc.customer,
 			"klient_telefon": doc.phone,
 			"klient_email": doc.email,
