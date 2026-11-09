@@ -259,6 +259,16 @@ def set_remote_state(intake, remote_state: str) -> None:
 	intake.flags.repair_intake_transition = True
 
 
+def get_accounting_snapshot(public_id, *, internal_scope):
+	_require_enabled()
+	if internal_scope != "kuck_shop.repair_commerce.v1":
+		raise RemoteRepairError("NOT_PERMITTED")
+	intake = _locked_intake(public_id)
+	if not intake.customer:
+		raise RemoteRepairError("VALIDATION_FAILED")
+	return {"customer": intake.customer, "email": intake.email}
+
+
 def submit_quote_decision(public_id, decision, expected_revision, request_id, access_token=None):
 	"""Apply an owned quote decision through the existing Naprawa workflow."""
 
@@ -357,6 +367,53 @@ def mark_return_label_ready(public_id, *, internal_scope):
 		allowed_from={"AWAITING_REPAIR_PAYMENT", "RETURN_LABEL_READY"},
 		to_state="RETURN_LABEL_READY",
 	)
+
+
+def mark_inbound_in_transit(public_id, *, internal_scope):
+	_internal_transition(
+		public_id,
+		internal_scope=internal_scope,
+		expected_revision=None,
+		allowed_from={"INBOUND_LABEL_READY", "INBOUND_IN_TRANSIT"},
+		to_state="INBOUND_IN_TRANSIT",
+	)
+
+
+def mark_inbound_delivered(public_id, *, internal_scope):
+	_internal_transition(
+		public_id,
+		internal_scope=internal_scope,
+		expected_revision=None,
+		allowed_from={"INBOUND_LABEL_READY", "INBOUND_IN_TRANSIT", "AWAITING_PHYSICAL_RECEIPT"},
+		to_state="AWAITING_PHYSICAL_RECEIPT",
+	)
+
+
+def mark_return_in_transit(public_id, *, internal_scope):
+	_internal_transition(
+		public_id,
+		internal_scope=internal_scope,
+		expected_revision=None,
+		allowed_from={"RETURN_LABEL_READY", "RETURN_IN_TRANSIT"},
+		to_state="RETURN_IN_TRANSIT",
+	)
+
+
+def mark_return_delivered(public_id, *, internal_scope):
+	if internal_scope != "kuck_shop.repair_commerce.v1":
+		raise RemoteRepairError("NOT_PERMITTED")
+	intake = _locked_intake(public_id)
+	if intake.remote_state not in {"RETURN_LABEL_READY", "RETURN_IN_TRANSIT", "COMPLETED"}:
+		raise RemoteRepairError("INVALID_TRANSITION")
+	if intake.accepted_repair:
+		repair = frappe.get_doc("Naprawa", intake.accepted_repair)
+		if repair.status == "Gotowe do odbioru":
+			from frappe.model.workflow import apply_workflow
+
+			apply_workflow(repair, "Wydaj zegarek")
+	intake.remote_state = "COMPLETED"
+	intake.flags.repair_intake_transition = True
+	intake.save()
 
 
 def _locked_intake(public_id):
