@@ -49,8 +49,11 @@ od newslettera i domyślnie wyłączonych powiadomień statusowych.
 Koszt zwrotu jest liczony serwerowo z rodzaju i wyniku naprawy, nigdy z kwoty
 przekazanej przez browser. Gwarancja pozytywna daje 0 PLN; zwykła naprawa dolicza
 20 PLN do wyceny; odrzucenie lub gwarancja negatywna daje wybór 20 PLN online albo
-25 PLN COD. Publiczne komendy nie ustawiają bezpośrednio pola `status`; używają
-kontrolowanych przejść i istniejącego workflow.
+25 PLN COD. Akceptacja wyceny prowadzi do `IN_REPAIR`, a płatność naprawy i zwrotu
+odblokowuje dopiero stan `Gotowe do odbioru`. Odrzucenie przed dostarczeniem nie
+tworzy zwrotu; po dostarczeniu operator najpierw potwierdza fizyczne przyjęcie,
+a `Anulowano` otwiera sam zwrot 20/25 PLN bez naliczania wyceny. Publiczne komendy
+nie ustawiają bezpośrednio pola `status`; używają kontrolowanych przejść i workflow.
 
 ## Integracja i niezawodność
 

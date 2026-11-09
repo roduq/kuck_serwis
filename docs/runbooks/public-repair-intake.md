@@ -24,8 +24,9 @@ Ponowienie akcji przyjęcia zwraca tę samą naprawę i nie wysyła drugiego e-m
 ## Wycena i wynik gwarancji
 
 - `Wyślij wycenę` ustawia `AWAITING_QUOTE_DECISION`. Klient akceptuje lub odrzuca w panelu z aktualną rewizją.
-- Akceptacja zapisuje zgodę i używa workflow `Akceptacja klienta`. Nie rozpoczynaj naprawy bez niej.
+- Akceptacja zapisuje zgodę i używa workflow `Akceptacja klienta`, po czym intake ma stan `IN_REPAIR`. Płatność końcowa odblokowuje dopiero `Gotowe do odbioru`.
 - Odrzucenie używa `Klient rezygnuje` i otwiera zwrot, bez obowiązkowego kontaktu manualnego.
+- Odrzucenie zgłoszenia przed dostarczeniem kończy proces bez przesyłki zwrotnej. Po dostarczeniu kurierem najpierw potwierdź fizyczne przyjęcie; `Anuluj` na `Naprawa` otwiera sam zwrot 20/25 PLN, bez naliczania wyceny.
 - Pole `Wynik gwarancji` ustawia serwis: `Uzasadniona`, `Nieuzasadniona` lub `Przekazana producentowi`. Deklaracja klienta nie wystarcza do darmowego zwrotu.
 
 ## Koszty dla klienta

@@ -29,7 +29,7 @@ class TestRepairQuoteDecision(IntegrationTestCase):
 		intake = _make_intake(customer=customer.name)
 		from frappe.model.workflow import apply_workflow
 
-		repair = _make_repair(customer, orientacyjna_wycena=300)
+		repair = _make_repair(customer, orientacyjna_wycena=300, source_intake=intake.name)
 		apply_workflow(repair, "Rozpocznij diagnozę")
 		apply_workflow(repair, "Wyślij wycenę")
 		repair.wynik_gwarancji = outcome
@@ -63,11 +63,47 @@ class TestRepairQuoteDecision(IntegrationTestCase):
 		self.assertEqual(repair.status, "W naprawie")
 		self.assertTrue(repair.klient_zaakceptowal)
 		intake.reload()
+		self.assertEqual(intake.remote_state, "IN_REPAIR")
+		with self.assertRaises(remote.RemoteRepairError):
+			remote.get_return_payment_snapshot(
+				intake.public_id, "TPAY", internal_scope="kuck_shop.repair_commerce.v1"
+			)
+		from frappe.model.workflow import apply_workflow
+
+		apply_workflow(repair, "Zakończ naprawę")
+		intake.reload()
 		self.assertEqual(intake.remote_state, "AWAITING_REPAIR_PAYMENT")
 		snapshot = remote.get_return_payment_snapshot(
 			intake.public_id, "TPAY", internal_scope="kuck_shop.repair_commerce.v1"
 		)
 		self.assertEqual(snapshot["amount_minor"], 32000)
+
+	def test_service_cancellation_after_receipt_charges_only_return(self):
+		customer = _make_customer()
+		intake = _make_intake(customer=customer.name)
+		repair = _make_repair(customer, orientacyjna_wycena=300, source_intake=intake.name)
+		intake.db_set(
+			{
+				"accepted_repair": repair.name,
+				"status": "Przyjęte",
+				"remote_state": "RECEIVED",
+				"address_line1": "11 Listopada 8",
+				"city": "Olsztyn",
+				"postal_code": "10-104",
+				"country": "PL",
+			}
+		)
+		from frappe.model.workflow import apply_workflow
+
+		apply_workflow(repair, "Anuluj")
+		intake.reload()
+		self.assertEqual(intake.remote_state, "AWAITING_REPAIR_PAYMENT")
+		snapshot = remote.get_return_payment_snapshot(
+			intake.public_id, "TPAY", internal_scope="kuck_shop.repair_commerce.v1"
+		)
+		self.assertEqual(snapshot["amount_minor"], 2000)
+		self.assertEqual(snapshot["repair_amount_minor"], 0)
+		self.assertEqual(snapshot["outcome"], "rejected")
 
 	def test_reject_cancels_and_offers_exact_cod_charge(self):
 		intake, repair = self.case()
@@ -86,20 +122,22 @@ class TestRepairQuoteDecision(IntegrationTestCase):
 		self.assertEqual(snapshot["outcome"], "rejected")
 
 	def test_positive_warranty_has_free_return_but_negative_is_charged(self):
-		intake, _repair = self.case(warranty=True, outcome="Uzasadniona")
+		intake, repair = self.case(warranty=True, outcome="Uzasadniona")
 		intake.last_quote_decision = "accept"
 		intake.remote_state = "AWAITING_REPAIR_PAYMENT"
 		intake.flags.repair_intake_transition = True
 		intake.save()
+		repair.db_set("status", "Gotowe do odbioru")
 		snapshot = remote.get_return_payment_snapshot(
 			intake.public_id, "FREE", internal_scope="kuck_shop.repair_commerce.v1"
 		)
 		self.assertEqual(snapshot["amount_minor"], 0)
-		other, _repair = self.case(warranty=True, outcome="Nieuzasadniona")
+		other, other_repair = self.case(warranty=True, outcome="Nieuzasadniona")
 		other.last_quote_decision = "reject"
 		other.remote_state = "AWAITING_REPAIR_PAYMENT"
 		other.flags.repair_intake_transition = True
 		other.save()
+		other_repair.db_set("status", "Anulowano")
 		snapshot = remote.get_return_payment_snapshot(
 			other.public_id, "TPAY", internal_scope="kuck_shop.repair_commerce.v1"
 		)

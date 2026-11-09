@@ -213,6 +213,16 @@ class TestRepairIntakeFrappe(IntegrationTestCase):
 				1,
 			)
 
+	def test_delivered_courier_intake_requires_physical_acceptance_before_cancellation(self):
+		intake = _make_intake()
+		intake.db_set({"delivery_method": "COURIER", "remote_state": "AWAITING_PHYSICAL_RECEIPT"})
+		intake.reload()
+		with self.assertRaises(frappe.ValidationError):
+			repair_intake.reject_repair_intake(intake.name, str(intake.modified), "Odrzucenie po dostawie")
+		intake.reload()
+		self.assertEqual(intake.status, "Nowe")
+		self.assertEqual(intake.remote_state, "AWAITING_PHYSICAL_RECEIPT")
+
 	def test_guest_form_renders_without_disclosing_internal_identity(self):
 		site = frappe.local.site
 		with (

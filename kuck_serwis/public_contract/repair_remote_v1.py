@@ -23,6 +23,7 @@ REMOTE_LABELS = {
 	"INBOUND_IN_TRANSIT": "Zegarek jest w drodze do serwisu",
 	"AWAITING_PHYSICAL_RECEIPT": "Oczekuje na przekazanie zegarka",
 	"RECEIVED": "Przyjęte do serwisu",
+	"IN_REPAIR": "Zegarek jest w naprawie",
 	"AWAITING_QUOTE_DECISION": "Wycena oczekuje na Twoją decyzję",
 	"AWAITING_REPAIR_PAYMENT": "Oczekuje na płatność naprawy i zwrotu",
 	"RETURN_LABEL_READY": "Przesyłka zwrotna jest przygotowana",
@@ -303,9 +304,14 @@ def submit_quote_decision(public_id, decision, expected_revision, request_id, ac
 		apply_workflow(repair, "Akceptacja klienta")
 	else:
 		apply_workflow(repair, "Klient rezygnuje")
+	intake.reload()
 	intake.last_quote_request_id = request_id
 	intake.last_quote_decision = decision
-	intake.remote_state = "READY_FOR_PICKUP" if intake.return_method == "SALON" else "AWAITING_REPAIR_PAYMENT"
+	intake.remote_state = (
+		"IN_REPAIR"
+		if decision == "accept"
+		else ("READY_FOR_PICKUP" if intake.return_method == "SALON" else "AWAITING_REPAIR_PAYMENT")
+	)
 	intake.flags.repair_intake_transition = True
 	intake.save()
 	return {"decision": decision, "remote_state": intake.remote_state}
@@ -319,6 +325,17 @@ def get_return_payment_snapshot(public_id, settlement, *, internal_scope):
 	if intake.remote_state != "AWAITING_REPAIR_PAYMENT" or not _address_complete(intake):
 		raise RemoteRepairError("INVALID_TRANSITION")
 	outcome = _return_outcome(intake)
+	if settlement not in {"TPAY", "COD", "FREE"}:
+		raise RemoteRepairError("VALIDATION_FAILED")
+	if intake.accepted_repair:
+		repair_status = frappe.db.get_value("Naprawa", intake.accepted_repair, "status")
+		allowed_statuses = (
+			{"Anulowano", "Gotowe do odbioru"}
+			if outcome in {"rejected", "warranty_rejected"}
+			else {"Gotowe do odbioru"}
+		)
+		if repair_status not in allowed_statuses:
+			raise RemoteRepairError("INVALID_TRANSITION")
 	if settlement == "FREE" and outcome not in {"warranty_approved", "manufacturer_forwarded"}:
 		raise RemoteRepairError("INVALID_TRANSITION")
 	amount = 0 if settlement == "FREE" else (2500 if settlement == "COD" else 2000)
@@ -460,12 +477,17 @@ def _public_actions(intake) -> list[str]:
 def _return_outcome(intake) -> str:
 	if not intake.accepted_repair:
 		return "paid"
-	outcome = frappe.db.get_value("Naprawa", intake.accepted_repair, "wynik_gwarancji")
-	return {
+	repair = frappe.db.get_value(
+		"Naprawa", intake.accepted_repair, ["wynik_gwarancji", "status"], as_dict=True
+	)
+	mapped = {
 		"Uzasadniona": "warranty_approved",
 		"Przekazana producentowi": "manufacturer_forwarded",
 		"Nieuzasadniona": "warranty_rejected",
-	}.get(outcome, "rejected" if intake.last_quote_decision == "reject" else "paid")
+	}.get(repair.wynik_gwarancji)
+	if mapped:
+		return mapped
+	return "rejected" if repair.status == "Anulowano" or intake.last_quote_decision == "reject" else "paid"
 
 
 def _accepted_public_id(intake) -> str | None:

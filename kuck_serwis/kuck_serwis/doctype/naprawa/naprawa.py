@@ -119,7 +119,15 @@ class Naprawa(Document):
 		intake = frappe.get_doc("Kuck Repair Intake", self.source_intake)
 		if self.status == "Oczekuje na akceptację":
 			intake.remote_state = "AWAITING_QUOTE_DECISION"
+		elif self.status in {"W naprawie", "Oczekiwanie na część"}:
+			intake.remote_state = "IN_REPAIR"
+		elif self.status == "Diagnoza":
+			intake.remote_state = "RECEIVED"
 		elif self.status == "Gotowe do odbioru":
+			intake.remote_state = (
+				"READY_FOR_PICKUP" if intake.return_method == "SALON" else "AWAITING_REPAIR_PAYMENT"
+			)
+		elif self.status == "Anulowano":
 			intake.remote_state = (
 				"READY_FOR_PICKUP" if intake.return_method == "SALON" else "AWAITING_REPAIR_PAYMENT"
 			)

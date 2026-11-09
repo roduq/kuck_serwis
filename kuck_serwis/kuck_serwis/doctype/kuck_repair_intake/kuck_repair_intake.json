@@ -50,7 +50,7 @@
   {"fieldname": "city", "fieldtype": "Data", "label": "Miasto", "read_only": 1},
   {"fieldname": "postal_code", "fieldtype": "Data", "label": "Kod pocztowy", "read_only": 1},
   {"fieldname": "country", "fieldtype": "Data", "default": "PL", "label": "Kraj", "read_only": 1},
-  {"default": "AWAITING_SERVICE_REVIEW", "fieldname": "remote_state", "fieldtype": "Select", "in_standard_filter": 1, "label": "Proces zdalny", "options": "AWAITING_SERVICE_REVIEW\nAWAITING_INBOUND_PAYMENT\nINBOUND_PAYMENT_PENDING\nINBOUND_LABEL_READY\nINBOUND_IN_TRANSIT\nAWAITING_PHYSICAL_RECEIPT\nRECEIVED\nAWAITING_QUOTE_DECISION\nAWAITING_REPAIR_PAYMENT\nRETURN_LABEL_READY\nRETURN_IN_TRANSIT\nREADY_FOR_PICKUP\nCOMPLETED\nCANCELLED\nREVIEW_REQUIRED", "read_only": 1, "reqd": 1},
+  {"default": "AWAITING_SERVICE_REVIEW", "fieldname": "remote_state", "fieldtype": "Select", "in_standard_filter": 1, "label": "Proces zdalny", "options": "AWAITING_SERVICE_REVIEW\nAWAITING_INBOUND_PAYMENT\nINBOUND_PAYMENT_PENDING\nINBOUND_LABEL_READY\nINBOUND_IN_TRANSIT\nAWAITING_PHYSICAL_RECEIPT\nRECEIVED\nIN_REPAIR\nAWAITING_QUOTE_DECISION\nAWAITING_REPAIR_PAYMENT\nRETURN_LABEL_READY\nRETURN_IN_TRANSIT\nREADY_FOR_PICKUP\nCOMPLETED\nCANCELLED\nREVIEW_REQUIRED", "read_only": 1, "reqd": 1},
   {"fieldname": "service_approved_by", "fieldtype": "Link", "label": "Zatwierdził proces", "options": "User", "read_only": 1},
   {"fieldname": "service_approved_at", "fieldtype": "Datetime", "label": "Zatwierdzenie procesu", "read_only": 1},
   {"fieldname": "inbound_quote_minor", "fieldtype": "Int", "label": "Koszt etykiety wejściowej (gr)", "read_only": 1},

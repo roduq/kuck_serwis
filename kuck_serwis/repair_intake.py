@@ -267,6 +267,8 @@ def reject_repair_intake(intake_name: str, expected_modified: str, reason: objec
 	_require_revision(doc, expected_modified)
 	if doc.status == "Przyjęte":
 		frappe.throw("REPAIR_INTAKE_ALREADY_ACCEPTED", frappe.ValidationError)
+	if doc.delivery_method == "COURIER" and doc.remote_state == "AWAITING_PHYSICAL_RECEIPT":
+		frappe.throw("REPAIR_INTAKE_PHYSICAL_DECISION_REQUIRED", frappe.ValidationError)
 	doc.status = "Odrzucone"
 	doc.remote_state = "CANCELLED"
 	doc.review_notes = reason.strip()
