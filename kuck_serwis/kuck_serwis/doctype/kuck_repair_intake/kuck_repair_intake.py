@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 
 import frappe
 from frappe.model.document import Document
@@ -11,10 +12,18 @@ _DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _STATUSES = frozenset({"Nowe", "Przyjęte", "Odrzucone"})
 _SOURCES = frozenset({"Guest", "Portal User"})
 _METHODS = frozenset({"SALON", "COURIER"})
+PUBLIC_ID_PATTERN = re.compile(r"^rqi_[A-Za-z0-9_-]{32}$")
+PUBLIC_ID_GENERATION_ATTEMPTS = 5
 
 
 class KuckRepairIntake(Document):
+	def before_insert(self):
+		if getattr(self, "public_id", None):
+			frappe.throw("Publiczny identyfikator jest zarządzany przez system.")
+		self.public_id = generate_unique_public_id()
+
 	def validate(self):
+		self.validate_public_id_immutable()
 		if self.status not in _STATUSES or self.source not in _SOURCES:
 			frappe.throw("REPAIR_INTAKE_INVALID_STATE")
 		if self.delivery_method not in _METHODS or self.return_method not in _METHODS:
@@ -83,6 +92,13 @@ class KuckRepairIntake(Document):
 		if self.accepted_repair and self.status != "Przyjęte":
 			frappe.throw("REPAIR_INTAKE_INVALID_REPAIR_LINK")
 
+	def validate_public_id_immutable(self):
+		if self.is_new():
+			return
+		stored_public_id = frappe.db.get_value("Kuck Repair Intake", self.name, "public_id")
+		if stored_public_id != self.public_id:
+			frappe.throw("Publiczny identyfikator jest niezmienny.")
+
 	def _validate_photos(self):
 		rows = tuple(self.get("photos") or ())
 		if len(rows) > 3 or int(self.photo_count or 0) != len(rows):
@@ -123,6 +139,16 @@ class KuckRepairIntake(Document):
 			).hexdigest()
 			if self.photo_manifest_sha256 != manifest:
 				frappe.throw("REPAIR_INTAKE_PHOTO_MANIFEST_INVALID")
+
+
+def generate_unique_public_id():
+	for _attempt in range(PUBLIC_ID_GENERATION_ATTEMPTS):
+		candidate = f"rqi_{secrets.token_urlsafe(24)}"
+		if PUBLIC_ID_PATTERN.fullmatch(candidate) and not frappe.db.exists(
+			"Kuck Repair Intake", {"public_id": candidate}
+		):
+			return candidate
+	frappe.throw("Nie udało się nadać publicznego identyfikatora zgłoszenia.")
 
 
 def _photo_snapshot(rows):

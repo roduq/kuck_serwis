@@ -7,3 +7,4 @@
 kuck_serwis.patches.przelacz_na_powiadom_per_kanal
 kuck_serwis.patches.backfill_kategoria_glowna
 kuck_serwis.patches.backfill_naprawa_public_id
+kuck_serwis.patches.backfill_repair_intake_public_id

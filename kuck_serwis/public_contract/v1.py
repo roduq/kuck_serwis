@@ -78,9 +78,108 @@ class AuditEventSink(Protocol):
 	def emit(self, event: dict[str, object]) -> bool: ...
 
 
+INTAKE_READ: Final = "account-intake-read"
+INTAKE_ROLLOUT_FLAG: Final = "enable_kuck_serwis_intake_read"
+INTAKE_PUBLIC_ID_PATTERN: Final = re.compile(r"^rqi_[A-Za-z0-9_-]{32}$")
+INTAKE_STATUS_MAP: Final = {
+	"Nowe": ("submitted", "Oczekuje na akceptację serwisu"),
+	"Przyjęte": ("accepted", "Przyjęte do serwisu"),
+	"Odrzucone": ("rejected", "Odrzucone"),
+}
+_INTAKE_READ_FIELDS: Final = (
+	"name",
+	"public_id",
+	"status",
+	"brand_declared",
+	"model_declared",
+	"submitted_at",
+	"delivery_method",
+	"return_method",
+)
+
+
 def get_capabilities() -> dict[str, object]:
 	features = [ACCOUNT_READ] if _account_read_enabled() else []
+	if _intake_read_enabled():
+		features.append(INTAKE_READ)
 	return {"contract": CONTRACT_NAME, "schema_revision": SCHEMA_REVISION, "features": features}
+
+
+def list_repair_intakes_for_current_user(page_size=50) -> dict[str, object]:
+	return _run_audited(
+		operation="list",
+		repair_handle=None,
+		call=lambda: _list_repair_intakes_for_current_user(page_size),
+	)
+
+
+def _list_repair_intakes_for_current_user(page_size=50) -> dict[str, object]:
+	_require_intake_read()
+	customers = _authorized_customers_for_current_user()
+	_validate_page_size(page_size)
+	user = _session_user()
+	rows_by_name = {}
+	for filters in (
+		{"requester_user": user},
+		{"customer": ["in", customers]} if customers else None,
+	):
+		if filters is None:
+			continue
+		for row in frappe.get_all(
+			"Kuck Repair Intake",
+			filters=filters,
+			fields=list(_INTAKE_READ_FIELDS),
+			limit=page_size,
+		):
+			rows_by_name[row.name] = row
+	rows = sorted(
+		rows_by_name.values(),
+		key=lambda row: (str(row.submitted_at), row.public_id),
+		reverse=True,
+	)[:page_size]
+	return {"items": [_project_intake(row) for row in rows]}
+
+
+def _intake_read_enabled() -> bool:
+	if frappe.conf.get(INTAKE_ROLLOUT_FLAG) is not True:
+		return False
+	try:
+		if _get_audit_sink() is None or _audit_hmac_key() is None:
+			return False
+		if "public_id" not in frappe.db.get_table_columns("Kuck Repair Intake"):
+			return False
+		get_column_index = getattr(frappe.db, "get_column_index", None)
+		if not callable(get_column_index) or not get_column_index(
+			"tabKuck Repair Intake", "public_id", unique=True
+		):
+			return False
+		if frappe.db.count("Kuck Repair Intake", {"public_id": ["in", ["", None]]}):
+			return False
+		return not frappe.db.count("Kuck Repair Intake", {"status": ["not in", list(INTAKE_STATUS_MAP)]})
+	except Exception:
+		return False
+
+
+def _require_intake_read() -> None:
+	if not _intake_read_enabled():
+		raise PublicContractError("DEPENDENCY_UNAVAILABLE", "Repair service is temporarily unavailable.")
+
+
+def _project_intake(row) -> dict[str, object]:
+	try:
+		public_status, status_label = INTAKE_STATUS_MAP[row.status]
+	except KeyError:
+		raise PublicContractError("DEPENDENCY_UNAVAILABLE", "Repair service is temporarily unavailable.")
+	return {
+		"schema": "repair-intake-portal/v1",
+		"intake_id": row.public_id,
+		"public_status": public_status,
+		"status_label": status_label,
+		"watch": {"brand": row.brand_declared or None, "model": row.model_declared or None},
+		"submitted_on": _date_string(row.submitted_at),
+		"delivery_method": row.delivery_method,
+		"return_method": row.return_method,
+	}
 
 
 def list_repairs_for_current_user(cursor=None, page_size=20) -> dict[str, object]:

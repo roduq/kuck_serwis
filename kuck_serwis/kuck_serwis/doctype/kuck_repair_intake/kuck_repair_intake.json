@@ -6,7 +6,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "status", "source", "submitted_at", "customer", "requester_user", "accepted_repair",
+  "public_id", "status", "source", "submitted_at", "customer", "requester_user", "accepted_repair",
   "contact_section", "full_name", "email", "phone",
   "watch_section", "brand_declared", "model_declared", "serial_number", "purchase_date", "warranty_claim", "suggested_repair_type",
   "issue_section", "issue_description", "condition_description", "photos_section", "photos", "photo_count", "photo_manifest_sha256",
@@ -15,6 +15,7 @@
   "security_section", "privacy_revision", "privacy_proof_sha256", "idempotency_binding", "request_fingerprint"
  ],
  "fields": [
+  {"fieldname": "public_id", "fieldtype": "Data", "hidden": 1, "label": "Publiczny identyfikator", "no_copy": 1, "read_only": 1, "unique": 1},
   {"default": "Nowe", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Nowe\nPrzyjęte\nOdrzucone", "read_only": 1, "reqd": 1},
   {"fieldname": "source", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Źródło", "options": "Guest\nPortal User", "read_only": 1, "reqd": 1},
   {"fieldname": "submitted_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Wysłano", "read_only": 1, "reqd": 1},

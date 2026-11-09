@@ -237,6 +237,9 @@ def accept_repair_intake(
 	doc.reviewed_at = now_datetime()
 	doc.flags.repair_intake_transition = True
 	doc.save()
+	from kuck_serwis.repair_notifications import notify_repair_created
+
+	notify_repair_created(intake=doc, repair=repair)
 	frappe.logger("repair_intake", allow_site=True).info({"event": "repair_intake_accepted"})
 	return {"repair": repair.name}
 

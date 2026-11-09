@@ -651,3 +651,113 @@ class TestPublicContractV1(IntegrationTestCase):
 		self.assertEqual(set(first), {"total_count", "preserved_count", "assigned_count", "missing_count"})
 		self.assertNotIn(repair.name, repr(first))
 		self.assertNotIn(customer.name, repr(first))
+
+
+def _make_intake(*, requester_user=None, customer=None, status="Nowe"):
+	from kuck_serwis.repair_intake_contract import PRIVACY_PROOF_SHA256, PRIVACY_REVISION
+
+	return frappe.get_doc(
+		{
+			"doctype": "Kuck Repair Intake",
+			"status": status,
+			"source": "Portal User" if requester_user else "Guest",
+			"requester_user": requester_user,
+			"customer": customer,
+			"submitted_at": frappe.utils.now_datetime(),
+			"full_name": "Synthetic Intake",
+			"email": "intake-private@example.test",
+			"phone": "+48500500500",
+			"brand_declared": "Intake Brand",
+			"model_declared": "Intake Model",
+			"serial_number": "PRIVATE-SERIAL",
+			"issue_description": "Private issue description",
+			"warranty_claim": 0,
+			"suggested_repair_type": "Naprawa długa",
+			"delivery_method": "COURIER",
+			"return_method": "COURIER",
+			"declared_value": 1000,
+			"privacy_revision": PRIVACY_REVISION,
+			"privacy_proof_sha256": PRIVACY_PROOF_SHA256,
+			"idempotency_binding": frappe.generate_hash(length=64),
+			"request_fingerprint": frappe.generate_hash(length=64),
+		}
+	).insert(ignore_permissions=True)
+
+
+class TestPublicIntakeContractV1(IntegrationTestCase):
+	def setUp(self):
+		super().setUp()
+		self.previous_user = frappe.session.user
+		self.audit_sink = _CapturingAuditSink()
+		self.sink_patch = patch.object(v1, "_get_audit_sink", return_value=self.audit_sink)
+		self.key_patch = patch.object(v1, "_audit_hmac_key", return_value=TEST_AUDIT_KEY)
+		self.enabled_patch = patch.object(v1, "_intake_read_enabled", return_value=True)
+		self.sink_patch.start()
+		self.key_patch.start()
+		self.enabled_patch.start()
+
+	def tearDown(self):
+		self.enabled_patch.stop()
+		self.key_patch.stop()
+		self.sink_patch.stop()
+		frappe.set_user(self.previous_user)
+		super().tearDown()
+
+	def test_public_id_is_generated_and_immutable(self):
+		intake = _make_intake()
+		self.assertRegex(intake.public_id, v1.INTAKE_PUBLIC_ID_PATTERN)
+		intake.public_id = "rqi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		with self.assertRaises(frappe.ValidationError):
+			intake.save(ignore_permissions=True)
+
+	def test_account_list_includes_requester_and_assigned_customer_only(self):
+		user_a = _make_user()
+		user_b = _make_user()
+		customer_a = _make_customer(user_a)
+		own = _make_intake(requester_user=user_a.name)
+		assigned = _make_intake(customer=customer_a.name)
+		_make_intake(requester_user=user_b.name)
+		_make_intake()
+		frappe.set_user(user_a.name)
+
+		result = v1.list_repair_intakes_for_current_user(50)
+
+		self.assertEqual({row["intake_id"] for row in result["items"]}, {own.public_id, assigned.public_id})
+		self.assertEqual({row["public_status"] for row in result["items"]}, {"submitted"})
+		for row in result["items"]:
+			self.assertEqual(row["schema"], "repair-intake-portal/v1")
+			self.assertEqual(row["status_label"], "Oczekuje na akceptację serwisu")
+		serialized = repr(result)
+		for forbidden in (
+			own.name,
+			assigned.name,
+			customer_a.name,
+			"intake-private@example.test",
+			"PRIVATE-SERIAL",
+		):
+			self.assertNotIn(forbidden, serialized)
+
+	def test_foreign_status_and_disabled_capability_fail_closed(self):
+		user = _make_user()
+		_make_customer(user)
+		_make_intake(requester_user=user.name)
+		frappe.set_user(user.name)
+		with patch.object(v1, "_intake_read_enabled", return_value=False):
+			with self.assertRaises(v1.PublicContractError) as caught:
+				v1.list_repair_intakes_for_current_user(50)
+		self.assertEqual(caught.exception.code, "DEPENDENCY_UNAVAILABLE")
+
+	def test_backfill_assigns_and_preserves_public_ids(self):
+		from kuck_serwis.patches import backfill_repair_intake_public_id
+
+		intake = _make_intake()
+		original = intake.public_id
+		frappe.db.set_value("Kuck Repair Intake", intake.name, "public_id", None, update_modified=False)
+		first = backfill_repair_intake_public_id.execute()
+		assigned = frappe.db.get_value("Kuck Repair Intake", intake.name, "public_id")
+		second = backfill_repair_intake_public_id.execute()
+		self.assertRegex(assigned, v1.INTAKE_PUBLIC_ID_PATTERN)
+		self.assertNotEqual(assigned, original)
+		self.assertGreaterEqual(first["assigned_count"], 1)
+		self.assertEqual(second["assigned_count"], 0)
+		self.assertEqual(second["missing_count"], 0)
